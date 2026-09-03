@@ -1,5 +1,5 @@
 extends Node2D
-## Procedural placeholder art: the poses line up with the simulation's contacts.
+## Original procedural anime-style athletes built around simulation contact joints.
 var game
 var effects: Array = []
 var trail: Array = []
@@ -8,18 +8,18 @@ var landing_guide: bool = true
 var font = ThemeDB.fallback_font
 const INK = Color("15283d")
 const CREAM = Color("f0f6ec")
-const BLUE = Color("70c7fa")
-const ORANGE = Color("ffb063")
+const BLUE = Color("4ecbff")
+const ORANGE = Color("ff9b42")
 
 func advance(dt: float) -> void:
 	clock += dt
 	for effect in effects:
 		effect.age += dt
-	effects = effects.filter(func(e): return e.age < 0.55)
+	effects = effects.filter(func(e): return e.age < 0.42)
 	trail.append({"position": game.ball, "age": 0.0})
 	for item in trail:
 		item.age += dt
-	trail = trail.filter(func(item): return item.age < 0.14)
+	trail = trail.filter(func(item): return item.age < 0.20)
 	queue_redraw()
 
 func add_event(event: Dictionary) -> void:
@@ -61,16 +61,32 @@ func _draw() -> void:
 		draw_player(p)
 	if game.phase not in ["point", "finished", "serve_ready", "serve_aim", "serve_windup"]:
 		for item in trail:
-			var alpha = (1 - item.age / 0.14) * 0.22
-			draw_circle(Vector2(item.position.x, -item.position.y), 8 * (1 - item.age / 0.14), Color(CREAM, alpha))
+			var alpha = (1 - item.age / 0.20) * 0.32
+			var at = Vector2(item.position.x, -item.position.y)
+			draw_circle(at, 4 + 5 * (1 - item.age / 0.20), Color(CREAM, alpha))
+	var ball_screen = Vector2(game.ball.x, -game.ball.y)
+	var screen_velocity = Vector2(game.ball_velocity.x, -game.ball_velocity.y)
+	if screen_velocity.length() > 720 and game.phase == "rally":
+		var back = -screen_velocity.normalized()
+		var length = clampf(screen_velocity.length() * 0.075, 50, 130)
+		for i in range(5):
+			var offset = back.orthogonal() * (i - 2) * 4
+			draw_line(ball_screen + back * 14 + offset, ball_screen + back * (length - abs(i - 2) * 11) + offset, Color(CREAM, 0.34 - abs(i - 2) * 0.045), 2.5, true)
 	draw_ball(Vector2(game.ball.x, -game.ball.y), game.time * 5)
 	for effect in effects:
 		var pos = Vector2(effect.position.x, -effect.position.y)
-		var alpha = 1 - effect.age / 0.55
+		var alpha = clampf(1 - effect.age / 0.42, 0, 1)
 		var color = ORANGE if effect.kind in ["spike", "block"] else BLUE
-		draw_arc(pos, 15 + effect.age * 65, 0, TAU, 28, Color(color, alpha * 0.8), 2, true)
+		var radius = 18 + effect.age * 155
+		draw_arc(pos, radius, 0, TAU, 32, Color(color, alpha * 0.82), 3.2, true)
+		if effect.kind in ["serve", "spike", "block"]:
+			var flash = clampf(1 - effect.age / 0.13, 0, 1)
+			draw_circle(pos, 24 * flash, Color(CREAM, flash * 0.24))
+			for i in range(10):
+				var ray = Vector2.from_angle(i * TAU / 10 + 0.16) * (42 + effect.age * 170)
+				draw_line(pos + ray * 0.38, pos + ray, Color(CREAM, alpha * 0.8), 3.0, true)
 		if effect.kind in ["spike", "block", "set"]:
-			caption(pos + Vector2(0, -32 - effect.age * 32), effect.kind.to_upper(), 16, Color(CREAM, alpha), true)
+			caption(pos + Vector2(0, -35 - effect.age * 45), effect.kind.to_upper(), 17, Color(CREAM, alpha), true)
 
 func draw_arena() -> void:
 	draw_rect(Rect2(-2000, -2200, 6000, 3500), Color("0c1625"))
@@ -145,55 +161,167 @@ func draw_net() -> void:
 	draw_line(Vector2(997, -90), Vector2(997, 15), Color("4398bd"), 3)
 	draw_line(Vector2(1000, top - 7), Vector2(1000, top - 48), CREAM, 3)
 
+func outlined_poly(points: PackedVector2Array, fill: Color, outline: Color = INK, width: float = 3.0) -> void:
+	draw_colored_polygon(points, fill)
+	var edge = points.duplicate()
+	edge.append(points[0])
+	draw_polyline(edge, outline, width, true)
+
+func outlined_line(points: Array, fill: Color, width: float) -> void:
+	var path = PackedVector2Array(points)
+	draw_polyline(path, INK, width + 4.0, true)
+	draw_polyline(path, fill, width, true)
+	for point in path:
+		draw_circle(point, width * 0.5 + 2.0, INK)
+		draw_circle(point, width * 0.5, fill)
+
 func limb(a: Vector2, b: Vector2, c: Vector2, color: Color, width: float) -> void:
-	draw_line(a, b, color, width, true)
-	draw_line(b, c, color, width, true)
-	draw_circle(b, width / 2, color)
-	draw_circle(c, width / 2, color)
+	outlined_line([a, b, c], color, width)
+
+func torso_shape(shoulder: Vector2, hip: Vector2, upper: float, lower: float) -> PackedVector2Array:
+	var axis = (hip - shoulder).normalized()
+	var across = Vector2(-axis.y, axis.x)
+	return PackedVector2Array([
+		shoulder - across * upper,
+		shoulder + across * upper,
+		hip + across * lower,
+		hip - across * lower
+	])
+
+func draw_shoe(foot: Vector2, direction: float, accent: Color, back: bool) -> void:
+	var d = direction if direction != 0 else 1.0
+	var shade = Color("c8d5d9") if back else CREAM
+	var sole = foot + Vector2(0, 3)
+	var shoe = PackedVector2Array([
+		foot + Vector2(-d * 5, -4),
+		foot + Vector2(d * 7, -4),
+		foot + Vector2(d * 13, 0),
+		sole + Vector2(d * 11, 2),
+		sole - Vector2(d * 6, -2)
+	])
+	outlined_poly(shoe, shade, INK, 2.5)
+	draw_line(foot + Vector2(d * 2, -2), foot + Vector2(d * 9, 0), accent, 2, true)
+
+func draw_head(head: Vector2, facing: float, skin: Color, hair: Color, style: int) -> void:
+	# Larger anime proportions and a sharp hair silhouette keep the player
+	# readable while the camera follows a fast ball.
+	draw_circle(head, 16.5, INK)
+	draw_circle(head, 13.8, skin)
+	var spikes: PackedVector2Array
+	if style == 0:
+		spikes = PackedVector2Array([
+			head + Vector2(-16, -4), head + Vector2(-15, -14),
+			head + Vector2(-9, -19), head + Vector2(-5, -16),
+			head + Vector2(-1, -23), head + Vector2(3, -17),
+			head + Vector2(9, -21), head + Vector2(15, -13),
+			head + Vector2(15, -3), head + Vector2(7, -8),
+			head + Vector2(2, -3), head + Vector2(-3, -9), head + Vector2(-9, -2)
+		])
+	elif style == 1:
+		spikes = PackedVector2Array([
+			head + Vector2(-16, -3), head + Vector2(-15, -15),
+			head + Vector2(-8, -21), head + Vector2(-1, -18),
+			head + Vector2(5, -22), head + Vector2(13, -17),
+			head + Vector2(16, -8), head + Vector2(10, -3),
+			head + Vector2(5, -10), head + Vector2(0, -3), head + Vector2(-6, -10), head + Vector2(-10, -2)
+		])
+	else:
+		spikes = PackedVector2Array([
+			head + Vector2(-17, -5), head + Vector2(-12, -18),
+			head + Vector2(-3, -22), head + Vector2(7, -20),
+			head + Vector2(16, -12), head + Vector2(17, -3),
+			head + Vector2(8, -6), head + Vector2(3, -1),
+			head + Vector2(-2, -8), head + Vector2(-8, -1)
+		])
+	# Mirror the haircut so its leading fringe follows the player.
+	if facing < 0:
+		for i in range(spikes.size()): spikes[i].x = head.x - (spikes[i].x - head.x)
+	outlined_poly(spikes, hair, INK, 2.5)
+	var eye = head + Vector2(facing * 6, 0)
+	draw_line(eye + Vector2(-facing * 2, -2), eye + Vector2(facing * 3, -1), INK, 2.2, true)
+	draw_circle(eye + Vector2(facing * 2, 0), 1.6, Color("eff8f4"))
+	draw_circle(eye + Vector2(facing * 2.5, 0), 0.9, INK)
+	draw_line(head + Vector2(facing * 8, 4), head + Vector2(facing * 11, 3), skin.darkened(0.38), 1.5, true)
+
+func draw_motion_streaks(p, origin: Vector2, team_color: Color) -> void:
+	var speed = absf(p.velocity.x)
+	if speed > 245:
+		var back = -signf(p.velocity.x)
+		var strength = clampf((speed - 245) / 350.0, 0.12, 0.8)
+		for i in range(4):
+			var y = -12.0 - i * 13.0
+			var start = origin + Vector2(back * (17 + i * 4), y)
+			draw_line(start, start + Vector2(back * (18 + speed * 0.08), i - 2), Color(team_color, strength * (0.34 - i * 0.045)), 2.0, true)
+	if p.jump_prepare > 0:
+		var pulse = 1.0 - p.jump_prepare / 0.085
+		draw_arc(origin + Vector2(0, 4), 18 + pulse * 18, PI, TAU, 18, Color(team_color, 0.6 * (1 - pulse)), 3, true)
+	if p.swing_elapsed >= 0 and p.pos.y > 25:
+		var sweep = clampf(p.swing_elapsed / 0.18, 0, 1)
+		var from = -2.6 if p.facing > 0 else -0.55
+		var to = -0.2 if p.facing > 0 else -2.95
+		draw_arc(origin + Vector2(0, -78), 61, from, lerpf(from, to, sweep), 20, Color(team_color, 0.18 + 0.28 * (1 - sweep)), 5, true)
 
 func draw_player(p) -> void:
 	var origin = Vector2(p.pos.x, -p.pos.y)
 	var f = p.facing
 	var team_color = BLUE if p.team == 0 else ORANGE
-	var skin = Color("e0d5be")
-	var dark = Color("1d3549")
-	if p.dive_timer > 0:
-		var direction = signf(p.velocity.x)
-		limb(origin + Vector2(-direction * 32, -13), origin + Vector2(-direction * 15, -25), origin + Vector2(direction * 2, -21), dark, 10)
-		draw_line(origin + Vector2(-direction * 3, -25), origin + Vector2(direction * 29, -31), team_color, 20, true)
-		draw_circle(origin + Vector2(direction * 38, -34), 11, skin)
-		limb(origin + Vector2(direction * 25, -33), origin + Vector2(direction * 45, -27), origin + Vector2(direction * 70, -24), skin, 7)
-	else:
-		var joints = p.skeleton()
-		for key in joints:
-			joints[key] = origin + Vector2(joints[key].x, -joints[key].y)
-		var shoulder = joints.shoulder
-		var hip = joints.hip
-		var head = joints.head
-		limb(hip, joints.back_knee, joints.back_foot, skin.darkened(0.16), 8)
-		limb(hip, joints.front_knee, joints.front_foot, skin, 8)
-		for foot in [joints.back_foot, joints.front_foot]:
-			draw_line(foot - Vector2(f * 5, 0), foot + Vector2(f * 8, 0), CREAM, 7, true)
-		limb(shoulder, joints.other_elbow, joints.other_hand, skin.darkened(0.14), 7)
-		draw_line(hip + Vector2(-8, 0), hip + Vector2(8, 0), dark, 21, true)
-		draw_line(hip + Vector2(0, -7), shoulder + Vector2(0, 3), team_color, 27, true)
-		draw_line(shoulder + Vector2(-11, 12), shoulder + Vector2(11, 12), Color(CREAM, 0.85), 4)
-		caption(shoulder + Vector2(0, 29), str(p.number), 14, INK, true)
-		draw_circle(head, 11, skin)
-		draw_arc(head + Vector2(0, -2), 10, PI, TAU, 10, dark, 6, true)
-		draw_circle(head + Vector2(f * 4, -1), 1.4, INK)
-		limb(shoulder, joints.elbow, joints.hand, skin, 8)
-		if p.swing_connected and p.swing_elapsed >= 0.12 and p.swing_elapsed < 0.23:
-			var alpha = (0.23 - p.swing_elapsed) / 0.11
-			draw_arc(shoulder, 53, -1.6 if f > 0 else -PI, 0.0 if f > 0 else -1.5, 16, Color(CREAM, alpha * 0.4), 3, true)
+	var team_dark = Color("1476a8") if p.team == 0 else Color("be5927")
+	var trim = Color("dff7ff") if p.team == 0 else Color("fff0d1")
+	var skins = [Color("efc9a5"), Color("d9ae88"), Color("f0d0b3"), Color("dfb98e"), Color("edc49f"), Color("c99570")]
+	var hairs = [Color("182636"), Color("713b2d"), Color("27313b"), Color("a96229"), Color("22242b"), Color("6c3028")]
+	var skin: Color = skins[p.id]
+	var hair: Color = hairs[p.id]
+	var joints = p.skeleton()
+	for key in joints:
+		joints[key] = origin + Vector2(joints[key].x, -joints[key].y)
+	var shoulder: Vector2 = joints.shoulder
+	var hip: Vector2 = joints.hip
+	var head: Vector2 = joints.head
+	draw_motion_streaks(p, origin, team_color)
+	# Back limbs first, then the uniform mass, then the leading limbs. Dark
+	# outlines keep each pose legible against court and crowd at any zoom.
+	limb(hip, joints.back_knee, joints.back_foot, skin.darkened(0.13), 9)
+	limb(hip, joints.front_knee, joints.front_foot, skin, 9)
+	var shoe_direction = signf(p.velocity.x) if absf(p.velocity.x) > 30 else f
+	draw_shoe(joints.back_foot, shoe_direction, team_color, true)
+	draw_shoe(joints.front_foot, shoe_direction, team_color, false)
+	limb(shoulder, joints.other_elbow, joints.other_hand, skin.darkened(0.10), 8)
+	# Fitted jersey and angular shorts replace the previous rectangular body.
+	outlined_poly(torso_shape(shoulder, hip, 17.5, 12.5), team_color, INK, 3.5)
+	var body_axis = (hip - shoulder).normalized()
+	var body_across = Vector2(-body_axis.y, body_axis.x)
+	draw_line(shoulder - body_across * 13, shoulder + body_axis * 10 - body_across * 10, trim, 4, true)
+	draw_line(shoulder + body_across * 13, shoulder + body_axis * 10 + body_across * 10, trim, 4, true)
+	var shorts = PackedVector2Array([
+		hip - body_across * 13 - body_axis * 5,
+		hip + body_across * 13 - body_axis * 5,
+		hip + body_across * 10 + body_axis * 11,
+		hip + body_axis * 5,
+		hip - body_across * 10 + body_axis * 11
+	])
+	outlined_poly(shorts, Color("12283a"), INK, 3)
+	draw_line(shoulder + body_axis * 6, hip - body_axis * 5, Color(team_dark, 0.75), 4, true)
+	# Number follows the torso rather than floating over a line segment.
+	var number_at = shoulder.lerp(hip, 0.53) + Vector2(0, 5)
+	caption(number_at, str(p.number), 14, trim, true)
+	draw_head(head, f, skin, hair, p.id % 3)
+	limb(shoulder, joints.elbow, joints.hand, skin, 8.5)
+	if p.swing_connected and p.swing_elapsed >= 0.12 and p.swing_elapsed < 0.23:
+		var alpha = (0.23 - p.swing_elapsed) / 0.11
+		var burst = joints.hand
+		for i in range(5):
+			var direction = Vector2.from_angle(-1.7 + i * 0.27) * Vector2(f, 1)
+			draw_line(burst - direction * 6, burst - direction * (18 + i * 3), Color(CREAM, alpha * 0.75), 2.4, true)
 
-	var label_at = origin + Vector2(0, -p.config.height - 40)
+	var label_at = origin + Vector2(0, -p.config.height - 49)
 	if p.id == game.human_id:
 		label_at.y -= 12
-		caption(label_at + Vector2(0, -10), "YOU", 17, BLUE, true)
+		caption(label_at + Vector2(0, -10), "YOU", 16, CREAM, true)
 		draw_colored_polygon(PackedVector2Array([label_at + Vector2(-7, -2), label_at + Vector2(7, -2), label_at + Vector2(0, 6)]), BLUE)
 	else:
-		caption(origin + Vector2(0, 33), p.role, 14, Color(CREAM, 0.78), true)
+		var tag = Rect2(origin.x - 18, origin.y + 24, 36, 18)
+		draw_style_box(seat_style(Color(INK, 0.72)), tag)
+		caption(origin + Vector2(0, 37), p.role, 11, Color(CREAM, 0.9), true)
 
 func draw_ball(pos: Vector2, rotation_angle: float) -> void:
 	draw_circle(pos + Vector2(1, 2), 13, Color(INK, 0.3))

@@ -30,6 +30,8 @@ func run() -> void:
 	var seen = {}
 	for frame in range(630):
 		main.game.step(1.0 / 120.0, {}, true)
+		for event in main.game.events:
+			main.court.add_event(event)
 		main.court.advance(1.0 / 120.0)
 		main.update_camera(1.0 / 120.0)
 		var p = main.game.players[0]
@@ -43,6 +45,12 @@ func run() -> void:
 		if not stage.is_empty() and not seen.has(stage):
 			seen[stage] = true
 			await capture(stage)
+	main.game.phase = "rally"
+	var diver = main.game.players[0]
+	diver.reset(500)
+	diver.dive_timer = 0.3
+	diver.velocity = Vector2(760, 0)
+	await capture("dive")
 	main.show_settings()
 	for i in range(5): await process_frame
 	await capture("settings")

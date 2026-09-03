@@ -9,7 +9,7 @@ The game separates keyboard/UI input, player actions, match rules, and drawing. 
 | `scripts/athlete.gd` | A single player's movement, plant/takeoff/swing/follow-through/landing state, joint poses, and contact positions |
 | `scripts/player_config.gd` | Shared configurable movement, jump, reach, and spike attributes, with small role variations |
 | `scripts/ai_controller.gd` | Ball prediction and role rules producing the same action dictionaries as human input |
-| `scripts/court_view.gd` | Arena, player poses, ball/trail, and contact effects |
+| `scripts/court_view.gd` | Arena, outlined anime-style athlete renderer, ball/player streaks, and contact effects |
 | `scripts/hud.gd` | Score, match prompts, role marker, and control hints |
 | `scripts/audio_feedback.gd` | Recorded CC0 samples, positional court voices, footfall variation, serve crowd envelope, volume and mute lifecycle |
 
@@ -35,6 +35,10 @@ Serve, pass, set, and spike velocities are calculated arcs with arcade assistanc
 Serve phases are `serve_ready → serve_aim → serve_windup → serve_toss → rally`. Hold X to aim, adjust the toss using A/D and W/S, release X for the throwing animation, approach, then use separate jump and swing inputs. The preview and released ball use the same launch velocity and gravity. A grounded server plants behind the baseline; an airborne server can travel over it. Missing the toss awards the point.
 
 The athlete skeleton supplies rendered joints and the striking-hand contact center. A swing has anticipation, a contact window, and follow-through. Contact captures the hand pose to meet the ball, and cannot cause a second contact. Run stride/footfall events track distance travelled; jump, cut, slide, and landing events drive their respective recorded sounds. Cosmetic motion events never reroll AI errors or increment ball-contact metrics.
+
+Player art is procedural and original. A tapered torso, angular shorts, outlined articulated limbs, three mirrored hair silhouettes, individual palettes, face details, and layered shoes are assembled around each athlete's simulation joints. The horizontal dive is another skeleton pose rather than a disconnected drawing. This keeps the visuals aligned with contacts and makes every action available to any controlled role.
+
+Fast attacks add ball streaks, player motion lines, swing arcs, radial contact bursts, camera velocity look-ahead, and a brief impact hold. Turning off impact effects also turns off the hold, shake, and punch zoom. These effects change presentation timing only; match time and ball physics remain deterministic.
 
 `audio_feedback.gd` owns a bounded pool of positional court voices and separate crowd streams. The looping anticipation vowel fades in while aiming, builds through the toss, and gives way to a reaction on a real serve contact. The crowd is briefly ducked under the hit. Pause/menu/mute stop active audio. Separate court and crowd gains are saved with controls. `--mute` is a runtime override that does not change the user's saved preference.
 

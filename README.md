@@ -1,6 +1,6 @@
-# SIDEOUT — jump serve update
+# SIDEOUT — kinetic player update
 
-A Mac-first, 2D volleyball prototype inspired by the basic play of The Spike: six athletes, one human wing spiker, and five AI players. Built in **Godot 4.7.2**, with original placeholder characters, a moving camera, and recorded court audio.
+A Mac-first, 2D volleyball prototype inspired by the basic play of The Spike: six athletes, one human wing spiker, and five AI players. Built in **Godot 4.7.2**, with original anime-style procedural athletes, a reactive camera, and recorded court audio.
 
 ## Play on Mac
 
@@ -33,14 +33,15 @@ Keyboard bindings, separate court/crowd volume sliders, sound, impact effects, a
 - Human control of the left wing spiker; five AI players use the same movement and contact mechanics.
 - AI receiving, setting, attacking, blocking, serving, diving, and a fallback setter when the normal setter takes the first touch.
 - Adjustable jump serves with a displayed parabola, hand-led toss motion, approach, foot plant, takeoff, timed contact, follow-through, and landing compression. AI servers use the same mechanics.
-- Running strides tied to distance, jumping, timed air swings, ground receives, blocks, and dives.
+- Faster acceleration and movement, running strides tied to distance, jumping, timed air swings, ground receives, blocks, and full-body dives.
 - Ball gravity, contact areas, a solid net, floor/out detection, three-touch and double-touch faults, and block touches that keep the ball live.
 - Role-based passing and set arcs, with actual contact timing determining whether a hit succeeds.
 - A full serve/rally/point/match-result loop, rotating servers on side-out, score display, and win-by-two scoring.
-- Smooth camera movement and zoom, player/action indicators, ball trail, animated joint poses, recorded sound effects, and menus.
+- Six distinct outlined athletes with fitted uniforms, faces, hair, hands, shorts, and court shoes. The same joint poses drive tosses, runs, plants, jumps, strikes, blocks, receives, landings, and dives.
+- Fast ball and player streaks, contact bursts, swing arcs, a short impact hold, stronger camera shake, velocity look-ahead, and quicker camera tracking.
 - Real volleyball impacts, softer passing/setting contacts, court-shoe squeaks, footsteps, slides, landings, and ball-floor sounds. A wordless crowd swell builds during serve preparation and releases at contact. Pause and mute stop ongoing audio.
 
-This is an arcade baseline. Roles stay in fixed formations; it does not implement regulation six-player rotations, back-row restrictions, or every official fault. AI difficulty and jump/spike timing need human playtesting. Teammates use simple ball/role rules; there is no call-for-set input. Online play, touch controls, player switching, progression, and finished art are outside this version.
+This is an arcade baseline. Roles stay in fixed formations; it does not implement regulation six-player rotations, back-row restrictions, or every official fault. AI difficulty and jump/spike timing need human playtesting. Teammates use simple ball/role rules; there is no call-for-set input. Online play, touch controls, player switching, progression, and authored sprite sheets are outside this version.
 
 ## Open the project
 

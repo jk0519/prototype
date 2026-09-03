@@ -64,6 +64,7 @@ func run() -> void:
 		if main.game.metrics.serve > 0 or main.game.phase == "point": break
 	for action in ["right", "left", "jump"]: Input.action_release(action)
 	expect(main.game.metrics.serve == 1, "Approach, jump and air swing serve through the scene InputMap")
+	expect(main.impact_hold > 0 and not main.court.effects.is_empty(), "Serve contact produces an impact hold and visual burst")
 	var x = main.game.players[0].pos.x
 	Input.action_press("right")
 	await frames(30)

@@ -225,6 +225,22 @@ func skeleton() -> Dictionary:
 		joints.hand = Vector2(35, 77)
 		joints.other_elbow = Vector2(10, 64)
 		joints.other_hand = Vector2(28, 77)
+	if dive_timer > 0:
+		# A long, low airborne silhouette. The local direction is converted back
+		# through facing below so diving left and right share one clean pose.
+		var d = signf(velocity.x) * facing
+		if d == 0: d = 1
+		joints.hip = Vector2(-d * 4, 25)
+		joints.shoulder = Vector2(d * 31, 35)
+		joints.head = Vector2(d * 53, 41)
+		joints.back_knee = Vector2(-d * 16, 18)
+		joints.back_foot = Vector2(-d * 44, 9)
+		joints.front_knee = Vector2(-d * 3, 17)
+		joints.front_foot = Vector2(-d * 31, 3)
+		joints.elbow = Vector2(d * 53, 33)
+		joints.hand = Vector2(d * 76, 28)
+		joints.other_elbow = Vector2(d * 47, 25)
+		joints.other_hand = Vector2(d * 70, 22)
 	for key in joints: joints[key].x *= facing
 	return joints
 

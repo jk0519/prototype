@@ -27,6 +27,8 @@ var settings_return: String = "title"
 var rebind_action: String = ""
 var rebind_buttons: Dictionary = {}
 var shake: float = 0.0
+var impact_hold: float = 0.0
+var impact_zoom: float = 0.0
 var autoplay: bool = false
 var capture_path: String = ""
 var capture_time: float = 8.4
@@ -100,6 +102,10 @@ func key_label(code: int) -> String:
 func _physics_process(dt: float) -> void:
 	if mode != "playing":
 		return
+	if impact_hold > 0:
+		impact_hold = maxf(0, impact_hold - dt)
+		sound.update(game, dt)
+		return
 	var intent = {
 		"move": Input.get_axis("left", "right"),
 		"jump": Input.is_action_just_pressed("jump"),
@@ -114,8 +120,14 @@ func _physics_process(dt: float) -> void:
 	for event in game.events:
 		court.add_event(event)
 		sound.play(event)
-		if event.kind in ["spike", "serve", "block"]:
-			shake = 2.0 if effects_on else 0.0
+		if event.kind in ["spike", "serve"]:
+			shake = 5.5 if effects_on else 0.0
+			impact_hold = 0.045 if effects_on else 0.0
+			impact_zoom = 0.055 if effects_on else 0.0
+		elif event.kind == "block":
+			shake = 3.5 if effects_on else 0.0
+			impact_hold = 0.025 if effects_on else 0.0
+			impact_zoom = 0.03 if effects_on else 0.0
 	sound.update(game, dt)
 	if game.phase == "finished":
 		show_result()
@@ -150,14 +162,21 @@ func update_camera(dt: float) -> void:
 	if game.phase in ["serve_aim", "serve_windup", "serve_toss"]: top = maxf(top, game.toss_height + 110)
 	var target_zoom = minf(viewport_size.x / span, viewport_size.y * 0.57 / top)
 	var target_x = clampf((lo + hi) * 0.5, 400, 1560)
+	if mode == "playing" and game.phase == "rally":
+		target_x += clampf(game.ball_velocity.x * 0.045, -75, 75)
 	if mode == "title":
 		target_zoom = minf(viewport_size.x / 2120, viewport_size.y / 920)
 		target_x = 1000
+	target_zoom *= 1.0 + impact_zoom
 	var target_y = -viewport_size.y * 0.26 / target_zoom
-	var speed = 1.0 - exp(-dt * 4.2)
+	if mode == "playing" and game.phase == "rally":
+		target_y -= clampf(game.ball_velocity.y * 0.035, -38, 38)
+	var tracking_rate = 5.2 + clampf(game.ball_velocity.length() / 260.0, 0, 6.0) if mode == "playing" else 4.2
+	var speed = 1.0 - exp(-dt * tracking_rate)
 	camera.zoom = camera.zoom.lerp(Vector2.ONE * target_zoom, speed)
 	camera.position = camera.position.lerp(Vector2(target_x, target_y), speed)
-	shake = maxf(0, shake - dt * 15)
+	shake = maxf(0, shake - dt * 28)
+	impact_zoom = maxf(0, impact_zoom - dt * 0.55)
 	camera.offset = Vector2(sin(run_elapsed * 105), cos(run_elapsed * 90)) * shake
 
 func _input(event: InputEvent) -> void:
@@ -271,7 +290,7 @@ func add_menu_button(label: String, action: Callable, primary: bool = false) -> 
 func show_title() -> void:
 	mode = "title"
 	clear_menu()
-	add_label("COURT 01  /  JUMP SERVE UPDATE", 11, Color("91b7c9"))
+	add_label("COURT 01  /  KINETIC BUILD", 11, Color("91b7c9"))
 	add_label("SIDEOUT", 50)
 	add_label("Toss. Approach. Jump. Connect.", 17, Color("b6cbd3"))
 	add_label("You play wing spiker. Your setter and blocker play\nautomatically. Beat the opposing trio to 15, win by 2.", 13, Color("8faaba"))
@@ -284,6 +303,9 @@ func show_title() -> void:
 
 func start_match() -> void:
 	sound.stop_all()
+	impact_hold = 0
+	impact_zoom = 0
+	shake = 0
 	game.reset()
 	court.trail.clear()
 	court.effects.clear()
