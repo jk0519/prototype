@@ -1,0 +1,6 @@
+.godot/
+builds/
+*.zip
+*.dmg
+.DS_Store
+test-output/
