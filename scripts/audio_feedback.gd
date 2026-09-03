@@ -1,41 +1,114 @@
 extends Node
-var enabled: bool = true
+## Recorded CC0 court foley. Contacts, foot plants and crowd cues follow gameplay.
+var enabled: bool = true:
+	set(value):
+		enabled = value
+		if not value: stop_all()
+var court_volume: float = 0.8
+var crowd_volume: float = 0.55
+var active: bool = false
 var voices: Array = []
 var samples: Dictionary = {}
 var cursor: int = 0
+var rng = RandomNumberGenerator.new()
+var crowd = AudioStreamPlayer.new()
+var reaction = AudioStreamPlayer.new()
+var foot_gate: float = 0
+var hit_duck: float = 0
 
 func _ready() -> void:
-	for i in range(5):
-		var voice = AudioStreamPlayer.new()
-		voice.volume_db = -15
+	rng.randomize()
+	for i in range(12):
+		var voice = AudioStreamPlayer2D.new()
+		voice.max_distance = 2600
+		voice.attenuation = 0.5
 		add_child(voice)
 		voices.append(voice)
-	for kind in ["serve", "receive", "set", "spike", "block", "dive", "free", "point", "net"]:
-		samples[kind] = make_sound(kind)
+	for kind in ["hit_0", "hit_1", "hit_2", "touch", "floor", "squeak_0", "squeak_1", "squeak_2", "squeak_3", "step_0", "step_1", "land", "slide"]:
+		samples[kind] = load("res://assets/audio/%s.wav" % kind)
+	var swell = load("res://assets/audio/crowd_swell.wav").duplicate()
+	swell.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	swell.loop_begin = 0
+	swell.loop_end = int(swell.get_length() * swell.mix_rate)
+	crowd.stream = swell
+	crowd.volume_db = -60
+	add_child(crowd)
+	reaction.stream = preload("res://assets/audio/crowd_release.wav")
+	add_child(reaction)
 
-func play(kind: String) -> void:
-	if not enabled or not samples.has(kind) or voices.is_empty():
-		return
+func stop_all() -> void:
+	for voice in voices: voice.stop()
+	crowd.stop()
+	reaction.stop()
+	hit_duck = 0
+	foot_gate = 0
+
+func set_active(value: bool) -> void:
+	if active == value: return
+	active = value
+	if not active: stop_all()
+
+func update(game, dt: float) -> void:
+	foot_gate = maxf(0, foot_gate - dt)
+	hit_duck = maxf(0, hit_duck - dt)
+	if not enabled or not active: return
+	var anticipating = game.phase in ["serve_aim", "serve_windup", "serve_toss"]
+	if anticipating and crowd_volume > 0:
+		if not crowd.playing:
+			crowd.volume_db = -42
+			crowd.play()
+		var build = game.serve_charge
+		if game.phase == "serve_toss":
+			build = clampf(0.5 + game.phase_time * 0.55, 0, 1)
+		var target_db = lerpf(-27, -12, build) + linear_to_db(maxf(crowd_volume, 0.001))
+		crowd.volume_db = move_toward(crowd.volume_db, target_db, dt * 25)
+		crowd.pitch_scale = lerpf(0.94, 1.04, build)
+	elif crowd.playing:
+		crowd.volume_db = move_toward(crowd.volume_db, -60, dt * 130)
+		if crowd.volume_db <= -59: crowd.stop()
+	reaction.volume_db = -11 + linear_to_db(maxf(crowd_volume, 0.001)) - (9 if hit_duck > 0 else 0)
+	if crowd_volume <= 0:
+		crowd.stop()
+		reaction.stop()
+
+func play(event: Dictionary) -> void:
+	if not enabled or not active or voices.is_empty(): return
+	var kind: String = event.kind
+	var sample = ""
+	var gain: float = -8
+	var pitch: float = rng.randf_range(0.97, 1.03)
+	match kind:
+		"serve", "spike":
+			sample = "hit_%d" % rng.randi_range(0, 2)
+			gain = -3
+			hit_duck = 0.16
+			if kind == "serve" and crowd_volume > 0:
+				crowd.stop()
+				reaction.volume_db = -20 + linear_to_db(maxf(crowd_volume, 0.001))
+				reaction.play()
+		"receive", "free", "dive": sample = "touch"; gain = -10
+		"set": sample = "touch"; gain = -17; pitch *= 1.07
+		"block": sample = "hit_1"; gain = -8
+		"floor": sample = "floor"; gain = -7
+		"net": sample = "touch"; gain = -23; pitch *= 0.7
+		"plant", "skid": sample = "squeak_%d" % rng.randi_range(0, 3); gain = -13
+		"takeoff": sample = "step_0"; gain = -18
+		"land": sample = "land"; gain = -13
+		"slide": sample = "slide"; gain = -15
+		"step":
+			if foot_gate > 0: return
+			foot_gate = 0.07
+			sample = "step_%d" % rng.randi_range(0, 1)
+			gain = -19
+			if rng.randf() < 0.22:
+				sample = "squeak_%d" % rng.randi_range(0, 3)
+				gain = -20
+	if sample.is_empty() or court_volume <= 0: return
 	var voice = voices[cursor % voices.size()]
 	cursor += 1
-	voice.stream = samples[kind]
+	voice.stream = samples[sample]
+	voice.position = Vector2(event.position.x, -event.position.y)
+	voice.pitch_scale = pitch
+	var background = 0 if event.player == 0 or kind in ["spike", "serve", "floor"] else -3
+	voice.volume_db = gain + background + linear_to_db(maxf(court_volume, 0.001))
 	voice.play()
-
-func make_sound(kind: String) -> AudioStreamWAV:
-	var length = 0.28 if kind == "point" else 0.095
-	var rate = 22050
-	var count = int(rate * length)
-	var data = PackedByteArray()
-	data.resize(count * 2)
-	var frequency = {"serve": 230, "receive": 290, "set": 420, "spike": 145, "block": 190, "dive": 220, "free": 350, "point": 560, "net": 115}[kind]
-	for i in range(count):
-		var t = float(i) / rate
-		var envelope = pow(1.0 - t / length, 2.5) * minf(t * 1800, 1.0)
-		var hz = frequency * (1.0 - t * 2.0) if kind != "point" else frequency * (1.0 + t * 2.0)
-		var value = sin(TAU * hz * t) * 0.7 + sin(TAU * hz * 2.7 * t) * 0.18
-		data.encode_s16(i * 2, int(value * envelope * 28000))
-	var wav = AudioStreamWAV.new()
-	wav.format = AudioStreamWAV.FORMAT_16_BITS
-	wav.mix_rate = rate
-	wav.data = data
-	return wav

@@ -46,14 +46,21 @@ func _draw() -> void:
 	text_at(Vector2(39, 120), "YOU  /  WING SPIKER", 10, BLUE)
 	if autoplay:
 		text_at(Vector2(32, 151), "AUTOPLAY TEST", 10, ORANGE)
-	if game.phase == "serve_ready":
+	if game.phase.begins_with("serve_"):
 		var own_serve = game.server_id == game.human_id and not autoplay
-		var prompt = "YOUR SERVE" if own_serve else ("TEAMMATE SERVING" if game.serving_team == 0 else "OPPONENT SERVING")
-		box(Rect2(w / 2 - 190, 145, 380, 63), Color(0.055, 0.10, 0.17, 0.92), 12, Color("334d60"))
-		text_at(Vector2(w / 2, 169), prompt, 13, WHITE, true)
-		text_at(Vector2(w / 2, 192), "Press %s to toss + jump, then %s to hit" % [key_names.get("jump", "Z"), key_names.get("jump", "Z")] if own_serve else "Get into position for the next ball", 12, MUTED, true)
-	elif game.phase == "serve_toss" and game.server_id == game.human_id and not autoplay:
-		text_at(Vector2(w / 2, 167), "PRESS %s AGAIN TO HIT" % key_names.get("jump", "Z"), 16, WHITE, true)
+		var prompt = "YOUR JUMP SERVE" if own_serve else ("TEAMMATE SERVING" if game.serving_team == 0 else "OPPONENT SERVING")
+		var hint = "Get into position for the next ball"
+		if own_serve:
+			match game.phase:
+				"serve_ready": hint = "Hold %s to aim your toss" % key_names.get("block", "X")
+				"serve_aim":
+					prompt = "%s / %s  DISTANCE    %s / %s  HEIGHT" % [key_names.get("left", "A"), key_names.get("right", "D"), key_names.get("toss_raise", "W"), key_names.get("toss_lower", "S")]
+					hint = "Release %s to toss" % key_names.get("block", "X")
+				"serve_windup": hint = "Get ready to approach"
+				"serve_toss": hint = "Approach, %s to jump, then %s to hit" % [key_names.get("jump", "Z"), key_names.get("jump", "Z")]
+		box(Rect2(w / 2 - 218, 138, 436, 63), Color(0.055, 0.10, 0.17, 0.92), 12, Color("334d60"))
+		text_at(Vector2(w / 2, 162), prompt, 13, WHITE, true)
+		text_at(Vector2(w / 2, 185), hint, 12, MUTED, true)
 	elif game.phase == "point":
 		var color = BLUE if game.point_winner == 0 else ORANGE
 		box(Rect2(w / 2 - 172, 151, 344, 86), Color(0.055, 0.10, 0.17, 0.95), 14, Color(color, 0.4))
@@ -64,7 +71,7 @@ func _draw() -> void:
 		text_at(Vector2(w - 33, 116) - Vector2(font.get_string_size(touch_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x, 0), touch_text, 11, MUTED)
 	# A compact, always-visible keyboard strip.
 	box(Rect2(24, h - 75, w - 48, 53), Color("101e30"), 12, Color("2a4155"))
-	var controls = [["left", "MOVE"], ["jump", "JUMP / SPIKE"], ["receive", "RECEIVE"], ["block", "BLOCK"], ["dive", "DIVE"]]
+	var controls = [["left", "MOVE"], ["jump", "JUMP / SPIKE"], ["receive", "RECEIVE"], ["block", "BLOCK / TOSS"], ["dive", "DIVE"]]
 	var cell = (w - 80) / 5.0
 	for i in range(controls.size()):
 		var x = 40 + i * cell

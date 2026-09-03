@@ -23,7 +23,7 @@ func advance(dt: float) -> void:
 	queue_redraw()
 
 func add_event(event: Dictionary) -> void:
-	if event.kind != "point":
+	if event.kind in ["serve", "receive", "set", "spike", "block", "dive", "free", "net"]:
 		effects.append({"position": event.position, "kind": event.kind, "age": 0.0})
 
 func ellipse(center: Vector2, radius: Vector2, color: Color) -> void:
@@ -42,6 +42,7 @@ func _draw() -> void:
 	if game == null:
 		return
 	draw_arena()
+	if game.phase in ["serve_aim", "serve_windup"]: draw_toss_guide()
 	if landing_guide and game.phase == "rally":
 		var t = game.time_to_height(game.BALL_RADIUS)
 		var x = game.ball.x + game.ball_velocity.x * t
@@ -58,7 +59,7 @@ func _draw() -> void:
 	draw_net()
 	for p in game.players:
 		draw_player(p)
-	if game.phase not in ["point", "finished", "serve_ready"]:
+	if game.phase not in ["point", "finished", "serve_ready", "serve_aim", "serve_windup"]:
 		for item in trail:
 			var alpha = (1 - item.age / 0.14) * 0.22
 			draw_circle(Vector2(item.position.x, -item.position.y), 8 * (1 - item.age / 0.14), Color(CREAM, alpha))
@@ -91,6 +92,15 @@ func draw_arena() -> void:
 			var x = -650 + col * 61
 			var shade = Color("263e53") if (col + row) % 3 else Color("2d4b5d")
 			draw_style_box(seat_style(shade), Rect2(x, y - 13, 41, 27))
+			if (col * 3 + row) % 5 < 3:
+				var center = Vector2(x + 20, y - 8)
+				var spectator = Color("466273") if col % 3 else Color("60777e")
+				draw_line(center + Vector2(0, 5), center + Vector2(0, 17), spectator, 12, true)
+				draw_circle(center, 5, spectator.lightened(0.08))
+				if game.phase in ["serve_toss", "serve_windup"]:
+					var lift = sin(clock * 3 + col * 0.7) * 2
+					draw_line(center + Vector2(-4, 8), center + Vector2(-10, -4 + lift), spectator, 3, true)
+					draw_line(center + Vector2(4, 8), center + Vector2(10, -4 - lift), spectator, 3, true)
 	draw_rect(Rect2(-700, -112, 3400, 45), Color("203b50"))
 	draw_rect(Rect2(-700, -68, 3400, 6), Color("88adbb"))
 	draw_rect(Rect2(-700, -61, 3400, 62), Color("182e43"))
@@ -147,7 +157,6 @@ func draw_player(p) -> void:
 	var team_color = BLUE if p.team == 0 else ORANGE
 	var skin = Color("e0d5be")
 	var dark = Color("1d3549")
-	var h = p.config.height / 104.0
 	if p.dive_timer > 0:
 		var direction = signf(p.velocity.x)
 		limb(origin + Vector2(-direction * 32, -13), origin + Vector2(-direction * 15, -25), origin + Vector2(direction * 2, -21), dark, 10)
@@ -155,48 +164,29 @@ func draw_player(p) -> void:
 		draw_circle(origin + Vector2(direction * 38, -34), 11, skin)
 		limb(origin + Vector2(direction * 25, -33), origin + Vector2(direction * 45, -27), origin + Vector2(direction * 70, -24), skin, 7)
 	else:
-		var running = absf(p.velocity.x) > 20 and p.pos.y < 1
-		var stride = sin(p.run_clock) * 18 if running else 0.0
-		var lean = clampf(p.velocity.x / 60, -7, 7)
-		var crouch = 12.0 if p.receiving and p.pos.y < 1 else 0.0
-		var hip = origin + Vector2(0, -38 * h + crouch)
-		var shoulder = origin + Vector2(lean, -76 * h + crouch)
-		var head = origin + Vector2(lean, -98 * h + crouch)
-		if p.pos.y > 1:
-			limb(hip + Vector2(-7, 0), origin + Vector2(-f * 12, -21), origin + Vector2(-f * 22, -15), skin.darkened(0.1), 8)
-			limb(hip + Vector2(7, 0), origin + Vector2(f * 18, -17), origin + Vector2(f * 9, -3), skin, 8)
-		else:
-			limb(hip + Vector2(-7, 0), origin + Vector2(-8 - stride * 0.3, -20 + crouch * 0.3), origin + Vector2(-11 - stride, -3), skin.darkened(0.1), 8)
-			limb(hip + Vector2(7, 0), origin + Vector2(8 + stride * 0.3, -20 + crouch * 0.3), origin + Vector2(11 + stride, -3), skin, 8)
-			draw_line(origin + Vector2(-15 - stride, -2), origin + Vector2(-5 - stride, -2), CREAM, 7, true)
-			draw_line(origin + Vector2(7 + stride, -2), origin + Vector2(18 + stride, -2), CREAM, 7, true)
-		# Shorts and jersey.
-		draw_line(hip + Vector2(-8, -1), hip + Vector2(8, -1), dark, 21, true)
+		var joints = p.skeleton()
+		for key in joints:
+			joints[key] = origin + Vector2(joints[key].x, -joints[key].y)
+		var shoulder = joints.shoulder
+		var hip = joints.hip
+		var head = joints.head
+		limb(hip, joints.back_knee, joints.back_foot, skin.darkened(0.16), 8)
+		limb(hip, joints.front_knee, joints.front_foot, skin, 8)
+		for foot in [joints.back_foot, joints.front_foot]:
+			draw_line(foot - Vector2(f * 5, 0), foot + Vector2(f * 8, 0), CREAM, 7, true)
+		limb(shoulder, joints.other_elbow, joints.other_hand, skin.darkened(0.14), 7)
+		draw_line(hip + Vector2(-8, 0), hip + Vector2(8, 0), dark, 21, true)
 		draw_line(hip + Vector2(0, -7), shoulder + Vector2(0, 3), team_color, 27, true)
 		draw_line(shoulder + Vector2(-11, 12), shoulder + Vector2(11, 12), Color(CREAM, 0.85), 4)
 		caption(shoulder + Vector2(0, 29), str(p.number), 14, INK, true)
-		# Hands reach the same centers that the match checks for contact.
-		if p.blocking and p.pos.y > 0:
-			limb(shoulder + Vector2(-10, 0), origin + Vector2(-14, -105 * h), origin + Vector2(f * 18 - 9, -p.config.reach - 7), skin, 7)
-			limb(shoulder + Vector2(10, 0), origin + Vector2(21, -104 * h), origin + Vector2(f * 18 + 9, -p.config.reach - 7), skin, 7)
-		elif p.swing_timer > 0 or p.contact_flash > 0 and p.pos.y > 35:
-			limb(shoulder, origin + Vector2(f * 20, -111 * h), origin + Vector2(f * 40, -p.config.reach), skin, 8)
-			limb(shoulder, origin + Vector2(-f * 20, -66), origin + Vector2(-f * 27, -50), skin.darkened(0.1), 7)
-		elif p.setting:
-			limb(shoulder + Vector2(-10, 0), origin + Vector2(-23, -94 * h), origin + Vector2(-7, -p.config.height - 15), skin, 7)
-			limb(shoulder + Vector2(10, 0), origin + Vector2(23, -94 * h), origin + Vector2(7, -p.config.height - 15), skin, 7)
-		elif p.receiving:
-			limb(shoulder + Vector2(-8, 4), origin + Vector2(f * 10, -65), origin + Vector2(f * 32, -76), skin.darkened(0.1), 7)
-			limb(shoulder + Vector2(8, 4), origin + Vector2(f * 21, -64), origin + Vector2(f * 35, -76), skin, 7)
-		elif p.pos.y > 0:
-			limb(shoulder, origin + Vector2(-f * 19, -91), origin + Vector2(-f * 8, -122), skin, 7)
-			limb(shoulder, origin + Vector2(f * 24, -67), origin + Vector2(f * 28, -92), skin.darkened(0.1), 7)
-		else:
-			limb(shoulder + Vector2(-8, 0), origin + Vector2(-17, -57 + stride * 0.3), origin + Vector2(-12 - stride * 0.5, -46), skin.darkened(0.1), 7)
-			limb(shoulder + Vector2(8, 0), origin + Vector2(17, -57 - stride * 0.3), origin + Vector2(12 + stride * 0.5, -45), skin, 7)
 		draw_circle(head, 11, skin)
 		draw_arc(head + Vector2(0, -2), 10, PI, TAU, 10, dark, 6, true)
 		draw_circle(head + Vector2(f * 4, -1), 1.4, INK)
+		limb(shoulder, joints.elbow, joints.hand, skin, 8)
+		if p.swing_connected and p.swing_elapsed >= 0.12 and p.swing_elapsed < 0.23:
+			var alpha = (0.23 - p.swing_elapsed) / 0.11
+			draw_arc(shoulder, 53, -1.6 if f > 0 else -PI, 0.0 if f > 0 else -1.5, 16, Color(CREAM, alpha * 0.4), 3, true)
+
 	var label_at = origin + Vector2(0, -p.config.height - 40)
 	if p.id == game.human_id:
 		label_at.y -= 12
@@ -213,3 +203,14 @@ func draw_ball(pos: Vector2, rotation_angle: float) -> void:
 		var offset = Vector2(cos(angle), sin(angle)) * 3
 		draw_arc(pos + offset, 8, angle, angle + 1.7, 12, ORANGE if i == 0 else Color("45667a"), 2.7, true)
 	draw_arc(pos, 11, 0, TAU, 30, Color("d3ddd0"), 1.1, true)
+
+func draw_toss_guide() -> void:
+	var points = game.toss_preview()
+	for i in range(points.size()):
+		var at = Vector2(points[i].x, -points[i].y)
+		var alpha = 0.75 if i % 2 == 0 else 0.4
+		draw_circle(at, 3 if i % 2 == 0 else 2, Color(CREAM, alpha))
+	var apex_at = game.toss_origin() + game.toss_velocity() * (game.toss_velocity().y / game.BALL_GRAVITY)
+	apex_at.y = -game.toss_height
+	draw_line(apex_at - Vector2(15, 0), apex_at + Vector2(15, 0), BLUE, 2)
+	caption(apex_at + Vector2(0, -17), "TOSS", 13, CREAM, true)

@@ -35,12 +35,35 @@ func run() -> void:
 	await frames(2)
 	expect(main.mode == "title", "Launch opens title screen")
 	expect(main.game.players.size() == 6, "Real scene contains six athletes")
+	main.sound.enabled = false
 	main.start_match()
 	await frames(42)
-	await tap("jump")
-	await frames(15)
-	await tap("jump")
-	expect(main.game.metrics.serve == 1, "Two jump inputs serve through the scene InputMap")
+	Input.action_press("block")
+	Input.action_press("toss_raise")
+	await frames(18)
+	Input.action_release("toss_raise")
+	expect(main.game.phase == "serve_aim" and main.game.toss_height > 580, "Actual X/W input aims the serve")
+	Input.action_release("block")
+	await frames(34)
+	expect(main.game.phase == "serve_toss" and main.game.players[0].pos.y == 0, "Release tosses without jumping")
+	# Feed the AI's timing decisions through the actual keyboard InputMap.
+	# This exercises input edges and the same human action path as hand play.
+	var last_jump = false
+	for i in range(340):
+		var intent = main.game.ai.intentions(main.game, true)[0]
+		var move = intent.get("move", 0.0)
+		if move > 0.1: Input.action_press("right")
+		else: Input.action_release("right")
+		if move < -0.1: Input.action_press("left")
+		else: Input.action_release("left")
+		var jump = intent.get("jump", false) or intent.get("swing", false)
+		if jump and not last_jump: Input.action_press("jump")
+		else: Input.action_release("jump")
+		last_jump = jump
+		await frames(1)
+		if main.game.metrics.serve > 0 or main.game.phase == "point": break
+	for action in ["right", "left", "jump"]: Input.action_release(action)
+	expect(main.game.metrics.serve == 1, "Approach, jump and air swing serve through the scene InputMap")
 	var x = main.game.players[0].pos.x
 	Input.action_press("right")
 	await frames(30)
@@ -51,6 +74,7 @@ func run() -> void:
 	var frozen_time = main.game.time
 	await frames(12)
 	expect(main.game.time == frozen_time, "Pause freezes the simulation")
+	expect(not main.sound.crowd.playing and not main.sound.reaction.playing, "Pause stops sustained crowd audio")
 	await escape()
 	expect(main.mode == "playing", "Escape resumes the match")
 	main.start_match()

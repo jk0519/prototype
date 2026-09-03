@@ -22,34 +22,64 @@ func expect(ok: bool, label: String) -> void:
 func check_human_control() -> void:
 	var game = MatchModel.new(2)
 	var x = game.players[0].pos.x
-	for i in range(240):
-		game.step(1.0 / 120.0)
-	expect(game.phase == "serve_ready", "Human serve must wait for input")
+	for i in range(240): game.step(1.0 / 120.0)
+	expect(game.phase == "serve_ready", "Human serve waits for toss input")
 	expect(game.players[0].pos.x == x, "AI must not move the human")
-	game.step(1.0 / 120.0, {"jump": true})
-	expect(game.phase == "serve_toss", "Jump input starts the human serve")
-	for i in range(18):
+	for i in range(60): game.step(1.0 / 120.0, {"toss": true, "aim_height": 1.0, "move": 1.0})
+	expect(game.phase == "serve_aim" and game.toss_height > 650 and game.toss_forward > 270, "Aim keys adjust toss height and distance")
+	expect(game.players[0].pos.x == x, "Aiming adjusts the arc without sliding the player")
+	game.step(1.0 / 120.0)
+	expect(game.phase == "serve_windup", "Releasing toss starts the throwing motion")
+	for i in range(33): game.step(1.0 / 120.0)
+	expect(game.phase == "serve_toss" and game.ball_velocity.y > 0, "Ball releases upward after the windup")
+	expect(game.players[0].pos.y == 0, "Tossing does not automatically jump")
+	for i in range(500):
 		game.step(1.0 / 120.0)
-	game.step(1.0 / 120.0, {"jump": true})
-	for i in range(20):
-		game.step(1.0 / 120.0, {"move": 1.0})
-	expect(game.metrics.serve == 1, "Second tap strikes a real serve contact")
-	expect(game.players[0].pos.x > x + 15, "Keyboard intent moves the human")
-	for delay in [36, 60]:
-		game.reset()
-		for i in range(42):
-			game.step(1.0 / 120.0)
-		game.step(1.0 / 120.0, {"jump": true})
-		for i in range(delay):
-			game.step(1.0 / 120.0)
-		game.step(1.0 / 120.0, {"jump": true})
-		expect(game.metrics.serve == 1, "Serve remains hittable after a %d-frame pause" % delay)
+		if game.phase == "point": break
+	expect(game.metrics.serve == 0 and game.point_reason == "MISSED SERVE", "An untouched toss loses the serve")
+	game.reset()
 	game.serving_team = 1
 	game.prepare_serve()
 	x = game.players[0].pos.x
-	for i in range(24):
-		game.step(1.0 / 120.0, {"move": 1.0})
-	expect(game.phase == "serve_ready" and game.players[0].pos.x > x + 20, "Human may reposition before an opponent serve")
+	for i in range(24): game.step(1.0 / 120.0, {"move": 1.0})
+	expect(game.phase == "serve_ready" and game.players[0].pos.x > x + 20, "Human can reposition before an opponent serve")
+	# Every role uses the same physical toss, approach, plant, jump and contact.
+	for server in range(6):
+		for arc in [Vector2(390, 70), Vector2(560, 210), Vector2(820, 370)]:
+			game = MatchModel.new(11)
+			game.serving_team = server / 3
+			game.serve_order[game.serving_team] = server % 3
+			game.prepare_serve()
+			game.toss_height = arc.x
+			game.toss_forward = arc.y
+			var was_airborne = false
+			var max_height = 0.0
+			for i in range(720):
+				game.step(1.0 / 120.0, {}, true)
+				max_height = maxf(max_height, game.ball.y)
+				was_airborne = was_airborne or game.players[server].pos.y > 35
+				if game.metrics.serve > 0 or game.phase == "point": break
+			expect(game.metrics.serve == 1 and was_airborne, "Role %d completes physical jump serve with arc %s" % [server, arc])
+			expect(absf(max_height - arc.x) < 4, "Toss follows the displayed parabolic height")
+	# Walking makes foley; standing and airborne travel do not make footsteps.
+	var athlete = game.players[0]
+	athlete.reset(400)
+	var steps = 0
+	for i in range(120):
+		athlete.step(1.0 / 120.0, {"move": 1.0})
+		steps += athlete.motion_events.count("step")
+	expect(steps >= 4 and steps <= 6, "Footsteps follow distance travelled")
+	athlete.step(1.0 / 120.0, {"jump": true})
+	expect(athlete.jump_prepare > 0 and athlete.pos.y == 0, "Jump begins with a grounded foot plant")
+	for i in range(20): athlete.step(1.0 / 120.0, {})
+	expect(athlete.pos.y > 0, "Plant transitions to takeoff")
+	athlete.begin_swing()
+	expect(athlete.swing_timer == 0, "Windup has no instant ball contact")
+	for i in range(9): athlete.step(1.0 / 120.0, {})
+	expect(athlete.swing_timer > 0, "Swing has a timed contact window")
+	athlete.confirm_hit()
+	for i in range(8): athlete.step(1.0 / 120.0, {})
+	expect(athlete.swing_elapsed > 0.12 and athlete.swing_timer == 0, "Follow-through cannot hit the ball twice")
 
 func check_rules() -> void:
 	var game = MatchModel.new()

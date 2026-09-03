@@ -6,17 +6,17 @@ func intentions(game, all_ai: bool) -> Array:
 	var result: Array = []
 	for p in game.players:
 		result.append({"move": toward(p, p.home_x)})
-	if game.phase == "serve_ready":
-		for p in game.players:
-			result[p.id] = {}
-		if game.phase_time > 0.85:
-			result[game.server_id] = {"jump": true}
-		return result
-	if game.phase == "serve_toss":
-		for p in game.players:
-			result[p.id] = {}
+	if game.phase in ["serve_ready", "serve_aim", "serve_windup", "serve_toss"]:
+		for p in game.players: result[p.id] = {}
 		var server = game.players[game.server_id]
-		result[server.id] = {"swing": server.pos.y > 45 and game.ball.distance_to(server.contact_center("serve")) < 95}
+		if game.phase == "serve_ready":
+			result[server.id] = {"toss": game.phase_time > 0.85}
+		elif game.phase == "serve_aim":
+			result[server.id] = {"toss": game.phase_time < 0.65}
+		elif game.phase == "serve_toss":
+			var t = game.time_to_height(300)
+			var target = game.ball.x + game.ball_velocity.x * t - server.facing * 38
+			result[server.id] = {"move": toward(server, target), "jump": server.pos.y <= 0.01 and t < 0.59, "swing": should_swing(game, server)}
 		return result
 	if game.phase != "rally":
 		return result
@@ -26,7 +26,7 @@ func intentions(game, all_ai: bool) -> Array:
 		var landing = game.ball.x + game.ball_velocity.x * time_low
 		var incoming = (landing < 1000.0) == (side == 0)
 		var our_half = (game.ball.x < 1000.0) == (side == 0)
-		var our_possession = game.last_team == side and game.touches > 0
+		var our_possession = game.last_team == side and game.touches > 0 and game.last_action != "serve"
 		if our_possession and game.touches == 1:
 			var setter_id = game.setter_for(side)
 			var setter = game.players[setter_id]
@@ -41,9 +41,9 @@ func intentions(game, all_ai: bool) -> Array:
 			var t = game.time_to_height(300)
 			var target_x = game.ball.x + game.ball_velocity.x * t - hitter.facing * 40 + game.ai_error_x[hitter.id] * 0.48
 			var intent = {"move": toward(hitter, target_x)}
-			if hitter.pos.y <= 0.01 and t <= 0.49 + game.ai_jump_error[hitter.id] and game.ball.y > 220:
+			if hitter.pos.y <= 0.01 and t <= 0.57 + game.ai_jump_error[hitter.id] and game.ball.y > 220:
 				intent["jump"] = true
-			if hitter.pos.y > 45 and game.ball.distance_to(hitter.contact_center("spike")) < 92:
+			if should_swing(game, hitter):
 				intent["swing"] = true
 			# An unhittable low set is returned as a free ball.
 			if game.ball.y < 155 and game.ball_velocity.y < 0:
@@ -64,7 +64,7 @@ func intentions(game, all_ai: bool) -> Array:
 					receiver_id = p.id
 			if receiver_id >= 0 and landing > 175 and landing < 1825:
 				var receiver = game.players[receiver_id]
-				var intent = {"move": toward(receiver, landing - receiver.facing * 24 + game.ai_error_x[receiver.id]), "receive": true}
+				var intent = {"move": toward(receiver, landing - receiver.facing * 24 + game.ai_error_x[receiver.id] * (0.45 if game.last_action == "serve" else 1.0)), "receive": true}
 				if our_half and time_low < 0.18 and absf(receiver.pos.x - landing) > 75:
 					intent["dive"] = true
 				result[receiver_id] = intent
@@ -74,7 +74,7 @@ func intentions(game, all_ai: bool) -> Array:
 			var t = game.time_to_height(300)
 			var x = game.ball.x + game.ball_velocity.x * t
 			if absf(x - 1000.0) < 330:
-				result[middle.id] = {"move": toward(middle, 947 if side == 0 else 1053), "block": t < 0.53 + game.ai_jump_error[middle.id]}
+				result[middle.id] = {"move": toward(middle, 947 if side == 0 else 1053), "block": t < 0.60 + game.ai_jump_error[middle.id]}
 		elif middle.pos.y > 0 and middle.blocking:
 			result[middle.id]["block"] = true
 	return result
@@ -82,3 +82,10 @@ func intentions(game, all_ai: bool) -> Array:
 func toward(player, target_x: float) -> float:
 	var dx = target_x - player.pos.x
 	return clampf(dx / 24.0, -1.0, 1.0) if absf(dx) > 4 else 0.0
+
+func should_swing(game, player) -> bool:
+	if player.pos.y < 55 or player.swing_cooldown > 0: return false
+	var anticipation = 0.075
+	var future_ball = game.ball + game.ball_velocity * anticipation - Vector2(0, 0.5 * game.BALL_GRAVITY * anticipation * anticipation)
+	var future_hand = player.pos + player.velocity * anticipation + Vector2(player.facing * 28, player.config.reach - 0.5 * player.config.gravity * anticipation * anticipation)
+	return future_ball.distance_to(future_hand) < 76

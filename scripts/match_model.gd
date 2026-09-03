@@ -21,6 +21,9 @@ var score: Array = [0, 0]
 var target_score: int = 15
 var phase: String = "serve_ready"
 var phase_time: float = 0.0
+var toss_height: float = 560.0
+var toss_forward: float = 210.0
+var serve_charge: float = 0.0
 var time: float = 0.0
 var serving_team: int = 0
 var serve_order: Array = [0, -1]
@@ -53,6 +56,8 @@ func _init(seed_value: int = 7):
 
 func reset() -> void:
 	score = [0, 0]
+	toss_height = 560
+	toss_forward = 210
 	serving_team = 0
 	serve_order = [0, -1]
 	server_id = 0
@@ -74,11 +79,15 @@ func prepare_serve() -> void:
 	contact_lock = 0
 	net_lock = 0
 	for p in players:
+		p.movement_bounds = Vector2(65, 962) if p.team == 0 else Vector2(1038, 1935)
 		p.reset(p.home_x)
 	server_id = serving_team * 3 + maxi(serve_order[serving_team], 0)
 	var server = players[server_id]
-	server.reset(125.0 if serving_team == 0 else 1875.0)
-	ball = server.pos + Vector2(server.facing * 20, 135)
+	server.movement_bounds = Vector2(-260, 962) if serving_team == 0 else Vector2(1038, 2260)
+	server.reset(-125.0 if serving_team == 0 else 2125.0)
+	server.serve_pose = "ready"
+	serve_charge = 0
+	ball = server.pos + server.skeleton().other_hand + Vector2(0, BALL_RADIUS)
 	previous_ball = ball
 	ball_velocity = Vector2.ZERO
 	refresh_ai_accuracy()
@@ -107,46 +116,85 @@ func time_to_height(height: float) -> float:
 		return 0.0
 	return maxf(0, (ball_velocity.y + sqrt(discriminant)) / BALL_GRAVITY)
 
+func toss_origin() -> Vector2:
+	var server = players[server_id]
+	return server.pos + Vector2(server.facing * 28, 129)
+
+func toss_velocity() -> Vector2:
+	var vy = sqrt(2 * BALL_GRAVITY * (toss_height - toss_origin().y))
+	var flight = vy / BALL_GRAVITY + sqrt(2 * (toss_height - 300) / BALL_GRAVITY)
+	return Vector2(players[server_id].facing * toss_forward / flight, vy)
+
+func toss_preview() -> Array:
+	var points: Array = []
+	var origin = toss_origin()
+	var velocity = toss_velocity()
+	for i in range(45):
+		var t = i * 0.045
+		var point = origin + velocity * t - Vector2(0, 0.5 * BALL_GRAVITY * t * t)
+		if point.y < BALL_RADIUS: break
+		points.append(point)
+	return points
+
+func step_athletes(dt: float, intents: Array) -> void:
+	for p in players:
+		p.step(dt, intents[p.id])
+		for kind in p.motion_events:
+			events.append({"kind": kind, "position": p.pos, "player": p.id})
+
 func step(dt: float, human_intent: Dictionary = {}, all_ai: bool = false) -> void:
 	events.clear()
-	if phase == "finished":
-		return
+	if phase == "finished": return
 	time += dt
 	phase_time += dt
 	contact_lock = maxf(0, contact_lock - dt)
 	net_lock = maxf(0, net_lock - dt)
 	if phase == "point":
-		if phase_time >= 2.2:
-			prepare_serve()
+		step_athletes(dt, [{}, {}, {}, {}, {}, {}])
+		if phase_time >= 2.2: prepare_serve()
 		return
 	var intents = ai.intentions(self, all_ai)
-	if not all_ai:
-		intents[human_id] = human_intent
-	if phase == "serve_ready":
-		ball = players[server_id].pos + Vector2(players[server_id].facing * 20, 135)
+	if not all_ai: intents[human_id] = human_intent
+	var server = players[server_id]
+	if phase in ["serve_ready", "serve_aim", "serve_windup"]:
+		var input = intents[server_id]
+		if phase == "serve_ready" and phase_time > 0.3 and input.get("toss", false):
+			phase = "serve_aim"
+			phase_time = 0
+		if phase == "serve_aim":
+			toss_forward = clampf(toss_forward + input.get("move", 0.0) * server.facing * dt * 160, 70, 370)
+			toss_height = clampf(toss_height + input.get("aim_height", 0.0) * dt * 230, 390, 820)
+			serve_charge = minf(1, serve_charge + dt * 0.65)
+			if phase_time > 0.1 and not input.get("toss", false):
+				phase = "serve_windup"
+				phase_time = 0
+		server.serve_pose = {"serve_ready": "ready", "serve_aim": "aim", "serve_windup": "windup"}[phase]
+		server.serve_pose_time = phase_time
+		intents[server_id] = {}
+		step_athletes(dt, intents)
+		ball = server.pos + server.skeleton().other_hand + Vector2(0, BALL_RADIUS)
 		previous_ball = ball
-		if phase_time > 0.30 and intents[server_id].get("jump", false):
+		if phase == "serve_windup" and phase_time >= 0.26:
+			ball = toss_origin()
+			previous_ball = ball
+			ball_velocity = toss_velocity()
 			phase = "serve_toss"
 			phase_time = 0
-			ball_velocity = Vector2(players[server_id].facing * 20, 630)
-			intents[server_id] = {"jump": true}
-		else:
-			# Receivers may get into position while the server prepares the toss.
-			for p in players:
-				if p.id != server_id:
-					p.step(dt, intents[p.id])
-			return
-	for p in players:
-		p.step(dt, intents[p.id])
-	# Four short swept movement intervals prevent fast spikes tunnelling through
-	# the thin net or floor, independently of display frame rate.
+			server.serve_pose = "released"
+			events.append({"kind": "toss", "position": ball, "player": server_id})
+		return
+	server.serve_pose_time = phase_time
+	if phase == "serve_toss" and server.pos.y <= 0.01:
+		server.movement_bounds = Vector2(-260, COURT_LEFT - 16) if server.team == 0 else Vector2(COURT_RIGHT + 16, 2260)
+	else:
+		server.movement_bounds = Vector2(-260, 962) if server.team == 0 else Vector2(1038, 2260)
+	step_athletes(dt, intents)
+	# Four swept intervals prevent fast spikes tunnelling through the net or floor.
 	for substep in range(4):
-		if phase not in ["rally", "serve_toss"]:
-			break
+		if phase not in ["rally", "serve_toss"]: break
 		step_ball(dt / 4.0)
-	if phase == "rally":
-		rally_time += dt
-	elif phase == "serve_toss" and phase_time > 3.0:
+	if phase == "rally": rally_time += dt
+	elif phase == "serve_toss" and phase_time > 4.0:
 		award_point(1 - serving_team, "MISSED SERVE")
 
 func step_ball(dt: float) -> void:
@@ -174,6 +222,7 @@ func step_ball(dt: float) -> void:
 			net_lock = 0.3
 	if ball.y <= BALL_RADIUS:
 		ball.y = BALL_RADIUS
+		events.append({"kind": "floor", "position": ball, "player": -1})
 		if phase == "serve_toss":
 			award_point(1 - serving_team, "MISSED SERVE")
 		elif ball.x < COURT_LEFT - BALL_RADIUS or ball.x > COURT_RIGHT + BALL_RADIUS:
@@ -196,7 +245,7 @@ func within_contact(p, action: String, radius: Vector2) -> bool:
 func check_contacts() -> void:
 	if phase == "serve_toss":
 		var server = players[server_id]
-		if server.swing_timer > 0 and within_contact(server, "serve", Vector2(74, 70)):
+		if server.pos.y > 35 and server.swing_timer > 0 and within_contact(server, "serve", Vector2(42, 38)):
 			serve(server)
 		return
 	# Block contacts take priority at the net. They do not consume a team touch.
@@ -207,7 +256,7 @@ func check_contacts() -> void:
 				return
 	for p in players:
 		if p.swing_timer > 0 and p.pos.y > 35:
-			if within_contact(p, "spike", Vector2(71, 65)):
+			if within_contact(p, "spike", Vector2(46, 42)):
 				contact(p, "spike")
 				return
 	if ball_velocity.y > 75:
@@ -234,10 +283,12 @@ func serve(p) -> void:
 	last_action = "serve"
 	touches = 1
 	contact_lock = 0.24
-	p.swing_timer = 0
-	p.contact_flash = 0.18
+	p.confirm_hit(ball - Vector2(p.facing * BALL_RADIUS, 0))
+	p.serve_pose = ""
+	ball = p.contact_center("serve") + Vector2(p.facing * BALL_RADIUS, 0)
 	var target = 1580.0 + rng.randf_range(-120, 120) if p.team == 0 else 420.0 + rng.randf_range(-120, 120)
-	var flight = maxf(1.48, absf(target - ball.x) / 1000.0)
+	var power = clampf((ball.y - 210) / 110.0, 0, 1)
+	var flight = maxf(1.0, absf(target - ball.x) / lerpf(1050, 1320, power))
 	ball_velocity = arc_to(Vector2(target, 75), flight)
 	rally_contacts += 1
 	emit_event("serve", ball, p.id)
@@ -264,6 +315,8 @@ func contact(p, action: String) -> void:
 		"block":
 			ball_velocity = Vector2(p.facing * maxf(440, absf(ball_velocity.x) * 0.78), -170)
 		"spike":
+			p.confirm_hit(ball - Vector2(p.facing * BALL_RADIUS, 0))
+			ball = p.contact_center("spike") + Vector2(p.facing * BALL_RADIUS, 0)
 			var depth = rng.randf_range(430, 740)
 			if p.id == human_id:
 				depth = 605.0 - p.last_move * p.facing * 125.0
@@ -305,7 +358,7 @@ func arc_to(target: Vector2, flight: float) -> Vector2:
 	return Vector2((target.x - ball.x) / flight, (target.y - ball.y + 0.5 * BALL_GRAVITY * flight * flight) / flight)
 
 func emit_event(kind: String, position: Vector2, player_id: int = -1) -> void:
-	if kind != "net":
+	if kind in ["serve", "receive", "set", "spike", "block", "dive", "free"]:
 		refresh_ai_accuracy()
 	metrics[kind] = metrics.get(kind, 0) + 1
 	events.append({"kind": kind, "position": position, "player": player_id})
