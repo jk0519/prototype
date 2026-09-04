@@ -1,36 +1,28 @@
 extends Node2D
-## Original procedural anime-style athletes built around simulation contact joints.
+## Authored soft athlete poses driven by the simulation state.
 var game
 var effects: Array = []
 var trail: Array = []
 var clock: float = 0
 var landing_guide: bool = true
 var font = ThemeDB.fallback_font
-var joint_tracks: Dictionary = {}
 const INK = Color("15283d")
 const CREAM = Color("f0f6ec")
 const BLUE = Color("4ecbff")
 const ORANGE = Color("ff9b42")
+const NORTH_ATHLETE = preload("res://assets/art/animation/wing-spiker-north.png")
+const SOUTH_ATHLETE = preload("res://assets/art/animation/wing-spiker-south.png")
+const ATLAS_COLUMNS = 8
+const ATLAS_ROWS = 4
+const ATHLETE_DRAW_SIZE = 224.0
+const FRAME_BASELINE = 360.0 / 384.0
+const FRAME_CONTACT_PIXELS = {
+	12: Vector2(246, 5),
+	22: Vector2(244, 27),
+}
 
 func advance(dt: float) -> void:
 	clock += dt
-	# Rendering follows the collision skeleton with a critically damped visual
-	# track. This supplies in-between motion across state changes while the hand
-	# catches up almost instantly during the contact snap.
-	if game != null:
-		for p in game.players:
-			var target = p.skeleton()
-			if not joint_tracks.has(p.id):
-				joint_tracks[p.id] = target.duplicate(true)
-				continue
-			var current: Dictionary = joint_tracks[p.id]
-			var response = 22.0
-			if p.jump_prepare > 0: response = 30.0
-			if p.dive_timer > 0 or p.dive_recovery > 0: response = 34.0
-			if p.swing_elapsed >= 0.035 and p.swing_elapsed < 0.15: response = 52.0
-			var blend = 1.0 - exp(-response * dt)
-			for key in target:
-				current[key] = current[key].lerp(target[key], blend)
 	for effect in effects:
 		effect.age += dt
 	effects = effects.filter(func(e): return e.age < 0.42)
@@ -188,122 +180,6 @@ func draw_net() -> void:
 	draw_line(Vector2(997, -90), Vector2(997, 15), Color("4398bd"), 3)
 	draw_line(Vector2(1000, top - 7), Vector2(1000, top - 48), CREAM, 3)
 
-func outlined_poly(points: PackedVector2Array, fill: Color, outline: Color = INK, width: float = 3.0) -> void:
-	draw_colored_polygon(points, fill)
-	var edge = points.duplicate()
-	edge.append(points[0])
-	draw_polyline(edge, outline, width, true)
-
-func tapered_segment(a: Vector2, b: Vector2, a_width: float, b_width: float, fill: Color, outline_width: float = 2.1) -> void:
-	var axis = b - a
-	if axis.length_squared() < 0.01:
-		return
-	var across = axis.normalized().orthogonal()
-	outlined_poly(PackedVector2Array([
-		a + across * a_width,
-		b + across * b_width,
-		b - across * b_width,
-		a - across * a_width
-	]), fill, INK, outline_width)
-
-func capsule(a: Vector2, b: Vector2, width: float, fill: Color, outline_width: float = 1.4) -> void:
-	# Overlapping round strokes create a single flowing limb without outlined
-	# circles or visible hinge seams at the joints.
-	draw_line(a, b, INK, width + outline_width * 2.0, true)
-	draw_circle(a, width * 0.5 + outline_width, INK)
-	draw_circle(b, width * 0.5 + outline_width, INK)
-	draw_line(a, b, fill, width, true)
-	draw_circle(a, width * 0.5, fill)
-	draw_circle(b, width * 0.5, fill)
-
-func oriented_ellipse(center: Vector2, axis: Vector2, along: float, across: float, fill: Color, outline_width: float = 2.0) -> void:
-	var direction = axis.normalized() if axis.length_squared() > 0.01 else Vector2.UP
-	var side = direction.orthogonal()
-	var points = PackedVector2Array()
-	for i in range(24):
-		var angle = i * TAU / 24.0
-		points.append(center + direction * cos(angle) * along + side * sin(angle) * across)
-	outlined_poly(points, fill, INK, outline_width)
-
-func shoulder_anchor(center: Vector2, toward: Vector2, across: Vector2, width: float) -> Vector2:
-	var side = signf((toward - center).dot(across))
-	if side == 0: side = 1
-	return center + across * width * side
-
-func draw_arm(root: Vector2, elbow: Vector2, hand: Vector2, skin: Color, jersey: Color, behind: bool) -> void:
-	var shade = skin.darkened(0.10) if behind else skin
-	var sleeve_end = root.lerp(elbow, 0.27)
-	# The sleeve starts as a tapered shape under the torso. Avoiding a round cap
-	# at the shoulder removes the ball-jointed toy silhouette.
-	tapered_segment(root, sleeve_end, 7.0, 5.8, jersey.darkened(0.08) if behind else jersey, 1.15)
-	capsule(sleeve_end, elbow, 7.4, shade, 1.05)
-	capsule(elbow, hand, 5.8, shade, 0.95)
-	oriented_ellipse(hand, hand - elbow, 5.5, 2.7, shade, 0.95)
-
-func draw_leg(root: Vector2, knee: Vector2, foot: Vector2, skin: Color, team_color: Color, behind: bool) -> void:
-	var shade = skin.darkened(0.10) if behind else skin
-	capsule(root, knee, 10.0, shade, 1.15)
-	capsule(knee, foot, 7.1, shade, 1.0)
-	var lower_axis = foot - knee
-	# The pad crosses the leg as one piece and hides the bend without reading as
-	# a circular joint.
-	oriented_ellipse(knee + lower_axis.normalized() * 1.0, lower_axis, 7.2, 5.8, Color("172434") if behind else Color("1d3042"), 1.1)
-
-func torso_shape(shoulder: Vector2, hip: Vector2, upper: float, lower: float) -> PackedVector2Array:
-	var axis = (hip - shoulder).normalized()
-	var across = Vector2(-axis.y, axis.x)
-	return PackedVector2Array([
-		shoulder - across * upper,
-		shoulder + across * upper,
-		hip + across * lower,
-		hip - across * lower
-	])
-
-func draw_shoe(foot: Vector2, direction: float, accent: Color, back: bool) -> void:
-	var d = direction if direction != 0 else 1.0
-	var shade = Color("c8d5d9") if back else CREAM
-	var sole = foot + Vector2(0, 3)
-	var shoe = PackedVector2Array([
-		foot + Vector2(-d * 5, -4),
-		foot + Vector2(d * 7, -4),
-		foot + Vector2(d * 13, 0),
-		sole + Vector2(d * 11, 2),
-		sole - Vector2(d * 6, -2)
-	])
-	outlined_poly(shoe, shade, INK, 1.7)
-	draw_line(foot + Vector2(d * 2, -2), foot + Vector2(d * 9, 0), accent, 2, true)
-
-func head_point(head: Vector2, up: Vector2, side: Vector2, x: float, y: float) -> Vector2:
-	return head + side * x + up * y
-
-func draw_head(head: Vector2, shoulder: Vector2, facing: float, skin: Color, hair: Color, style: int) -> void:
-	var up = (head - shoulder).normalized()
-	if up.length_squared() < 0.01: up = Vector2.UP
-	var side = Vector2(-up.y, up.x)
-	# The face is intentionally blank. Expression comes from the silhouette,
-	# hair, torso angle, and pose instead of eyes or a mouth.
-	oriented_ellipse(head, up, 14.0, 10.4, skin, 1.5)
-	var lift = float(style) * 0.8
-	var hair_points = PackedVector2Array([
-		head_point(head, up, side, -11.2, 2.0),
-		head_point(head, up, side, -10.5, 9.2),
-		head_point(head, up, side, -6.5, 13.7 + lift),
-		head_point(head, up, side, -1.5, 15.7),
-		head_point(head, up, side, 3.8, 14.8 + lift),
-		head_point(head, up, side, 9.4, 10.5),
-		head_point(head, up, side, 11.2, 4.0),
-		head_point(head, up, side, 7.0, 6.5),
-		head_point(head, up, side, 3.4, 5.2 + lift),
-		head_point(head, up, side, 0.2, 8.2),
-		head_point(head, up, side, -3.5, 5.1),
-		head_point(head, up, side, -7.4, 6.7)
-	])
-	if facing < 0:
-		for i in range(hair_points.size()):
-			var offset = hair_points[i] - head
-			hair_points[i] = head - side * offset.dot(side) + up * offset.dot(up)
-	outlined_poly(hair_points, hair, INK, 1.5)
-
 func draw_motion_streaks(p, origin: Vector2, team_color: Color) -> void:
 	var speed = absf(p.velocity.x)
 	if speed > 245:
@@ -322,74 +198,79 @@ func draw_motion_streaks(p, origin: Vector2, team_color: Color) -> void:
 		var to = -0.2 if p.facing > 0 else -2.95
 		draw_arc(origin + Vector2(0, -78), 61, from, lerpf(from, to, sweep), 20, Color(team_color, 0.18 + 0.28 * (1 - sweep)), 5, true)
 
-func display_skeleton(p) -> Dictionary:
-	if joint_tracks.has(p.id):
-		return joint_tracks[p.id].duplicate(true)
-	return p.skeleton()
+func athlete_frame(p) -> int:
+	if p.dive_timer > 0:
+		return 30
+	if p.dive_recovery > 0:
+		return 31
+	var serving_action = p.id == game.server_id and (game.phase == "serve_toss" or (game.last_action == "serve" and game.last_player == p.id and p.swing_elapsed >= 0))
+	if p.serve_pose in ["ready", "aim", "windup"]:
+		if p.serve_pose == "ready": return 16
+		if p.serve_pose == "aim": return 17
+		return 17 if p.serve_pose_time < 0.14 else 18
+	if serving_action:
+		if p.swing_elapsed >= 0:
+			if p.swing_elapsed < 0.080: return 21
+			if p.swing_elapsed < 0.170: return 22
+			return 23
+		if p.jump_prepare > 0: return 19
+		if p.pos.y > 1: return 20
+		if absf(p.velocity.x) > 20: return 19
+		return 18
+	if p.swing_elapsed >= 0:
+		if p.swing_elapsed < 0.080: return 11
+		if p.swing_elapsed < 0.160: return 12
+		if p.swing_elapsed < 0.240: return 13
+		if p.swing_elapsed < 0.340: return 14
+		return 15
+	if p.blocking:
+		return 29 if p.pos.y > 35 or p.contact_flash > 0 else 28
+	if p.setting:
+		return 27 if p.contact_flash > 0 or p.set_elapsed > 0.18 else 26
+	if p.receiving:
+		return 25 if p.contact_flash > 0 else 24
+	if p.jump_prepare > 0:
+		return 8 if p.jump_prepare > 0.055 else 9
+	if p.pos.y > 1:
+		return 10 if p.velocity.y > p.config.jump_speed * 0.55 else 11
+	if p.landing_timer > 0:
+		return 15
+	if p.skid_cooldown > 0.20:
+		return 7
+	if absf(p.velocity.x) > 20:
+		var run_frames = [2, 3, 4, 5, 6, 7]
+		var phase = int(floor(fposmod(p.run_clock, TAU) / TAU * run_frames.size())) % run_frames.size()
+		return run_frames[phase]
+	return 0 if fposmod(p.animation_clock + p.id * 0.13, 0.72) < 0.42 else 1
+
+func athlete_region(frame: int, texture: Texture2D) -> Rect2:
+	var column = frame % ATLAS_COLUMNS
+	var row = frame / ATLAS_COLUMNS
+	var cell_width = texture.get_width() / float(ATLAS_COLUMNS)
+	var cell_height = texture.get_height() / float(ATLAS_ROWS)
+	return Rect2(column * cell_width, row * cell_height, cell_width, cell_height)
 
 func draw_player(p) -> void:
 	var origin = Vector2(p.pos.x, -p.pos.y)
-	var f = p.facing
-	var team_color = BLUE if p.team == 0 else ORANGE
-	var team_dark = Color("1476a8") if p.team == 0 else Color("be5927")
-	var trim = Color("dff7ff") if p.team == 0 else Color("fff0d1")
-	var skins = [Color("efc9a5"), Color("d9ae88"), Color("f0d0b3"), Color("dfb98e"), Color("edc49f"), Color("c99570")]
-	var hairs = [Color("182636"), Color("713b2d"), Color("27313b"), Color("a96229"), Color("22242b"), Color("6c3028")]
-	var skin: Color = skins[p.id]
-	var hair: Color = hairs[p.id]
-	var joints = display_skeleton(p)
-	for key in joints:
-		joints[key] = origin + Vector2(joints[key].x, -joints[key].y)
-	var shoulder: Vector2 = joints.shoulder
-	var hip: Vector2 = joints.hip
-	var head: Vector2 = joints.head
-	var body_axis = (hip - shoulder).normalized()
-	var body_across = Vector2(-body_axis.y, body_axis.x)
-	draw_motion_streaks(p, origin, team_color)
-	# Limbs begin at separate shoulder and hip anchors. Tapered segments and
-	# fitted pads keep the body connected without visible ball joints.
-	var back_hip = shoulder_anchor(hip, joints.back_knee, body_across, 6.4)
-	var front_hip = shoulder_anchor(hip, joints.front_knee, body_across, 6.4)
-	draw_leg(back_hip, joints.back_knee, joints.back_foot, skin, team_color, true)
-	draw_leg(front_hip, joints.front_knee, joints.front_foot, skin, team_color, false)
-	var shoe_direction = signf(p.velocity.x) if absf(p.velocity.x) > 30 else f
-	draw_shoe(joints.back_foot, shoe_direction, team_color, true)
-	draw_shoe(joints.front_foot, shoe_direction, team_color, false)
-	var back_shoulder = shoulder_anchor(shoulder, joints.other_elbow, body_across, 15.8)
-	draw_arm(back_shoulder, joints.other_elbow, joints.other_hand, skin, team_color, true)
-	# A longer shoulder line and narrow waist match the lean volleyball physique
-	# in the reference while preserving every gameplay contact joint.
-	outlined_poly(torso_shape(shoulder, hip, 20.0, 11.5), team_color, INK, 1.55)
-	draw_line(shoulder - body_across * 13, shoulder + body_axis * 10 - body_across * 10, trim, 4, true)
-	draw_line(shoulder + body_across * 13, shoulder + body_axis * 10 + body_across * 10, trim, 4, true)
-	var shorts = PackedVector2Array([
-		hip - body_across * 14 - body_axis * 5,
-		hip + body_across * 14 - body_axis * 5,
-		hip + body_across * 10 + body_axis * 11,
-		hip + body_axis * 5,
-		hip - body_across * 10 + body_axis * 11
-	])
-	outlined_poly(shorts, Color("12283a"), INK, 1.7)
-	draw_line(shoulder + body_axis * 7, hip - body_axis * 5, Color(team_dark, 0.55), 2, true)
-	var neck_base = shoulder - body_axis * 2.5
-	var neck_top = head + body_axis * 10.5
-	tapered_segment(neck_base, neck_top, 4.4, 3.8, skin.darkened(0.03), 1.4)
-	# Number follows the torso rather than floating over a line segment.
-	var number_at = shoulder.lerp(hip, 0.53) + Vector2(0, 5)
-	caption(number_at, str(p.number), 14, trim, true)
-	draw_head(head, shoulder, f, skin, hair, p.id % 3)
-	var front_shoulder = shoulder_anchor(shoulder, joints.elbow, body_across, 16.0)
-	draw_arm(front_shoulder, joints.elbow, joints.hand, skin, team_color, false)
+	var frame = athlete_frame(p)
+	var texture: Texture2D = NORTH_ATHLETE if p.team == 0 else SOUTH_ATHLETE
+	draw_motion_streaks(p, origin, BLUE if p.team == 0 else ORANGE)
+	draw_set_transform(origin, 0.0, Vector2(p.facing, 1.0))
+	var destination = Rect2(Vector2(-ATHLETE_DRAW_SIZE * 0.5, -ATHLETE_DRAW_SIZE * FRAME_BASELINE), Vector2.ONE * ATHLETE_DRAW_SIZE)
+	if p.swing_connected and FRAME_CONTACT_PIXELS.has(frame):
+		var art_hand = (FRAME_CONTACT_PIXELS[frame] - Vector2(192, 360)) * (ATHLETE_DRAW_SIZE / 384.0)
+		var physics_hand = Vector2(p.impact_hand.x, -p.impact_hand.y)
+		destination.position += physics_hand - art_hand
+	draw_texture_rect_region(texture, destination, athlete_region(frame, texture))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	if p.swing_connected and p.swing_elapsed >= 0.12 and p.swing_elapsed < 0.23:
 		var alpha = (0.23 - p.swing_elapsed) / 0.11
-		var burst = joints.hand
+		var burst = origin + Vector2(p.impact_hand.x * p.facing, -p.impact_hand.y)
 		for i in range(5):
-			var direction = Vector2.from_angle(-1.7 + i * 0.27) * Vector2(f, 1)
+			var direction = Vector2.from_angle(-1.7 + i * 0.27) * Vector2(p.facing, 1)
 			draw_line(burst - direction * 6, burst - direction * (18 + i * 3), Color(CREAM, alpha * 0.75), 2.4, true)
-
 	var label_at = origin + Vector2(0, -p.config.height - 49)
 	if p.id == game.human_id:
-		# Contact grade and speed occupy this space during a swing.
 		if p.swing_elapsed < 0:
 			label_at.y -= 12
 			caption(label_at + Vector2(0, -10), "YOU", 16, CREAM, true)
