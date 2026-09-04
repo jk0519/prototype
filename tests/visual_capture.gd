@@ -37,7 +37,7 @@ func run() -> void:
 		var p = main.game.players[0]
 		var stage = ""
 		if main.game.phase == "serve_aim" and main.game.phase_time > 0.4: stage = "aim"
-		elif main.game.phase == "serve_windup" and main.game.phase_time > 0.18: stage = "toss"
+		elif main.game.phase == "serve_windup" and main.game.phase_time > 0.07: stage = "toss"
 		elif p.jump_prepare > 0 and p.jump_prepare < 0.05: stage = "plant"
 		elif p.pos.y > 160 and p.swing_elapsed < 0: stage = "jump"
 		elif p.swing_connected and p.swing_elapsed < 0.14: stage = "contact"

@@ -16,7 +16,7 @@ The dimensions and timings below are measurements from visible frames. They are 
 - At 1280×720, a grounded athlete normally occupies about 45–65 pixels of visible height. The court remains the dominant shape in the frame.
 - The painted court commonly fills roughly 65–82% of the frame width. High tosses and sets pull the camera wider or higher instead of making the athlete dominate the frame.
 - Strong contacts keep the ball path readable. Feedback is directional: a stretched ball trail, a short contact flash, a small camera kick or roll, and a brief freeze. The framing does not punch into a large character close-up.
-- The server can move horizontally while preparing and charging the toss. Toss distance comes from hold duration. Releasing the input throws the ball; movement continues into the approach, jump, and spike-like contact.
+- The server can move horizontally while preparing and charging the toss. The carried ball must remain attached to the displayed hand until a visible release. Toss distance comes from hold duration. Releasing the input throws the ball; movement continues into the approach, jump, and spike-like contact.
 - A normal point does not open a result screen or suspend the match. The score changes in the existing court view and the next serve setup follows in about half a second. A separate result view is reserved for the completed match.
 - Receives and sets use deliberately readable arcs. Attacks and jump serves change velocity sharply at contact and travel much faster, with a steep downward finish.
 

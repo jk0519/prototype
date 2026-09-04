@@ -6,13 +6,14 @@ const AI = preload("res://scripts/ai_controller.gd")
 const BALL_RADIUS: float = 11.0
 const BALL_GRAVITY: float = 1800.0
 const NET_X: float = 1000.0
-const NET_HEIGHT: float = 207.0
+const NET_HEIGHT: float = 172.0
 const COURT_LEFT: float = 180.0
 const COURT_RIGHT: float = 1820.0
 const TOSS_MIN_HEIGHT: float = 400.0
 const TOSS_MAX_HEIGHT: float = 940.0
 const TOSS_MIN_FORWARD: float = 120.0
 const TOSS_MAX_FORWARD: float = 480.0
+const SERVE_RAISE_DURATION: float = 0.11
 const POINT_TRANSITION_DURATION: float = 0.52
 
 var players: Array = []
@@ -98,7 +99,7 @@ func prepare_serve() -> void:
 	server.serve_pose = "ready"
 	serve_charge = 0
 	toss_forward = TOSS_MIN_FORWARD
-	ball = server.pos + server.skeleton().other_hand + Vector2(0, BALL_RADIUS)
+	ball = held_ball_position()
 	previous_ball = ball
 	ball_velocity = Vector2.ZERO
 	ball_topspin = 0
@@ -134,7 +135,18 @@ func ball_gravity() -> float:
 
 func toss_origin() -> Vector2:
 	var server = players[server_id]
-	return server.pos + Vector2(server.facing * 28, 129)
+	# Frame 17's open tossing palm is at (+/-32, 96) in world units. The ball
+	# center sits one radius above it, so free flight begins at that same hand.
+	return server.pos + Vector2(server.facing * 32, 108)
+
+func held_ball_position() -> Vector2:
+	var server = players[server_id]
+	if phase == "serve_ready" or (phase == "serve_aim" and phase_time < SERVE_RAISE_DURATION):
+		# Frame 16 holds the ball beside the forward hip.
+		return server.pos + Vector2(server.facing * 25, 48)
+	# Frame 17 has the tossing arm extended. Lock the ball to that visible palm
+	# during charge and windup; only the release creates free ball motion.
+	return toss_origin()
 
 func toss_velocity() -> Vector2:
 	var vy = sqrt(2 * BALL_GRAVITY * (toss_height - toss_origin().y))
@@ -184,11 +196,13 @@ func step(dt: float, human_intent: Dictionary = {}, all_ai: bool = false) -> voi
 		if phase == "serve_aim":
 			toss_height = clampf(toss_height + input.get("aim_height", 0.0) * dt * 420, TOSS_MIN_HEIGHT, TOSS_MAX_HEIGHT)
 			# The Spike's serve button controls toss distance by hold time. A/D stays
-			# movement throughout the setup so the player can choose the run-up.
-			serve_charge = minf(1, serve_charge + dt * 0.78)
+			# movement throughout the setup so the player can choose the run-up. The
+			# first beat raises the ball from the hip before charge begins.
+			if phase_time >= SERVE_RAISE_DURATION:
+				serve_charge = minf(1, serve_charge + dt * 0.78)
 			var charged = smoothstep(0.0, 1.0, serve_charge)
 			toss_forward = lerpf(TOSS_MIN_FORWARD, TOSS_MAX_FORWARD, charged)
-			if phase_time > 0.1 and not input.get("toss", false):
+			if phase_time > SERVE_RAISE_DURATION + 0.06 and not input.get("toss", false):
 				phase = "serve_windup"
 				phase_time = 0
 		server.serve_pose = {"serve_ready": "ready", "serve_aim": "aim", "serve_windup": "windup"}[phase]
@@ -196,9 +210,9 @@ func step(dt: float, human_intent: Dictionary = {}, all_ai: bool = false) -> voi
 		# Do not pass block/toss through to Athlete: only retain horizontal motion.
 		intents[server_id] = {"move": input.get("move", 0.0)}
 		step_athletes(dt, intents)
-		ball = server.pos + server.skeleton().other_hand + Vector2(0, BALL_RADIUS)
+		ball = held_ball_position()
 		previous_ball = ball
-		if phase == "serve_windup" and phase_time >= 0.26:
+		if phase == "serve_windup" and phase_time >= 0.12:
 			ball = toss_origin()
 			previous_ball = ball
 			ball_topspin = 0

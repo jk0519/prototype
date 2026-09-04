@@ -75,7 +75,8 @@ func _draw() -> void:
 	if game == null:
 		return
 	draw_arena()
-	if game.phase in ["serve_aim", "serve_windup"]: draw_toss_guide()
+	if game.phase == "serve_windup" or (game.phase == "serve_aim" and game.phase_time >= game.SERVE_RAISE_DURATION):
+		draw_toss_guide()
 	if landing_guide and game.phase == "rally":
 		var t = game.time_to_height(game.BALL_RADIUS)
 		var x = game.ball.x + game.ball_velocity.x * t
@@ -258,7 +259,8 @@ func draw_net() -> void:
 
 func draw_motion_streaks(p, origin: Vector2, team_color: Color) -> void:
 	var speed = absf(p.velocity.x)
-	if speed > 260:
+	var carrying_serve_ball = p.id == game.server_id and game.phase in ["serve_ready", "serve_aim", "serve_windup"]
+	if speed > 260 and not carrying_serve_ball:
 		var back = -signf(p.velocity.x)
 		var strength = clampf((speed - 260) / 430.0, 0.12, 0.9)
 		for i in range(6):
@@ -287,8 +289,9 @@ func athlete_frame(p) -> int:
 	var serving_action = p.id == game.server_id and (game.phase == "serve_toss" or (game.last_action == "serve" and game.last_player == p.id and p.swing_elapsed >= 0))
 	if p.serve_pose in ["ready", "aim", "windup"]:
 		if p.serve_pose == "ready": return 16
-		if p.serve_pose == "aim": return 17
-		return 17 if p.serve_pose_time < 0.14 else 18
+		if p.serve_pose == "aim": return 16 if p.serve_pose_time < game.SERVE_RAISE_DURATION else 17
+		# Keep the raised tossing palm on screen until the ball actually leaves it.
+		return 17
 	if serving_action:
 		if p.swing_elapsed >= 0:
 			if p.swing_elapsed < 0.055: return 21
@@ -296,7 +299,7 @@ func athlete_frame(p) -> int:
 			return 23
 		if p.jump_prepare > 0: return 19
 		if p.pos.y > 1: return 20
-		if absf(p.velocity.x) > 20: return 19
+		if absf(p.velocity.x) > 20: return 18
 		return 18
 	if p.swing_elapsed >= 0:
 		if p.swing_elapsed < 0.055: return 11

@@ -23,12 +23,17 @@ func expect(ok: bool, label: String) -> void:
 func check_human_control() -> void:
 	var game = MatchModel.new(2)
 	var x = game.players[0].pos.x
+	expect(game.ball.distance_to(game.players[0].pos + Vector2(25, 48)) < 0.01, "Ready server visibly holds the ball at the hip")
 	for i in range(240): game.step(1.0 / 120.0)
 	expect(game.phase == "serve_ready", "Human serve waits for toss input")
 	expect(game.players[0].pos.x == x, "AI must not move the human")
+	for i in range(8): game.step(1.0 / 120.0, {"toss": true})
+	expect(game.phase == "serve_aim" and game.serve_charge == 0, "Serve begins with a deliberate ball-raise beat before charging")
+	expect(game.ball.distance_to(game.players[0].pos + Vector2(25, 48)) < 0.01, "Ball stays in the low hand during the opening raise beat")
 	for i in range(120): game.step(1.0 / 120.0, {"toss": true, "aim_height": 1.0, "move": 1.0})
 	expect(game.phase == "serve_aim" and game.toss_height > 820 and game.toss_forward > 290, "Hold time charges toss distance while vertical input raises its height")
 	expect(game.players[0].pos.x > x + 300, "Human can move throughout the serve setup")
+	expect(game.ball.distance_to(game.players[0].pos + Vector2(32, 108)) < 0.01, "Charged serve keeps the ball attached to the visible tossing palm")
 	var high_toss = game.toss_height
 	var forward_toss = game.toss_forward
 	var aimed_x = game.players[0].pos.x
@@ -37,6 +42,7 @@ func check_human_control() -> void:
 	expect(absf(game.players[0].pos.x - aimed_x) < 35, "Releasing movement stops the server independently of toss charge")
 	game.step(1.0 / 120.0)
 	expect(game.phase == "serve_windup", "Releasing toss starts the throwing motion")
+	expect(game.ball.distance_to(game.players[0].pos + Vector2(32, 108)) < 0.01, "Windup does not detach or float the ball before release")
 	for i in range(33): game.step(1.0 / 120.0)
 	expect(game.phase == "serve_toss" and game.ball_velocity.y > 0, "Ball releases upward after the windup")
 	expect(game.players[0].pos.y == 0, "Tossing does not automatically jump")
@@ -63,9 +69,9 @@ func check_human_control() -> void:
 			var max_height = 0.0
 			for i in range(720):
 				game.step(1.0 / 120.0, {}, true)
+				if game.metrics.serve > 0 or game.phase == "point": break
 				max_height = maxf(max_height, game.ball.y)
 				was_airborne = was_airborne or game.players[server].pos.y > 35
-				if game.metrics.serve > 0 or game.phase == "point": break
 			expect(game.metrics.serve == 1 and was_airborne, "Role %d completes physical jump serve with arc %s" % [server, arc])
 			expect(absf(max_height - arc.x) < 12, "Toss follows the displayed parabolic height")
 	# Walking makes foley; standing and airborne travel do not make footsteps.
@@ -123,6 +129,7 @@ func check_human_control() -> void:
 
 func check_rules() -> void:
 	var game = MatchModel.new()
+	expect(game.NET_HEIGHT == 172.0, "Net collision height matches the lowered visual net")
 	game.phase = "rally"
 	game.last_team = 0
 	game.ball = Vector2(1500, 12)
