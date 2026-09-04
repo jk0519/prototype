@@ -75,15 +75,16 @@ func play(event: Dictionary) -> void:
 	if not enabled or not active or voices.is_empty(): return
 	var kind: String = event.kind
 	var pitch: float = rng.randf_range(0.97, 1.03)
+	var quality: float = float(event.get("quality", 0.62))
 	match kind:
 		"spike":
-			play_sample("spike_hit", -2.0, pitch, event)
-			play_sample("block_hit", -12.0, pitch * 0.72, event)
+			play_sample("spike_hit", lerpf(-6.0, -0.5, quality), pitch * lerpf(0.96, 1.04, quality), event)
+			play_sample("block_hit", lerpf(-18.0, -9.0, quality), pitch * 0.72, event)
 			hit_duck = 0.16
 			return
 		"serve":
-			play_sample("spike_hit", -3.0, pitch * 0.97, event)
-			play_sample("block_hit", -14.0, pitch * 0.70, event)
+			play_sample("spike_hit", lerpf(-7.0, -1.0, quality), pitch * lerpf(0.94, 1.02, quality), event)
+			play_sample("block_hit", lerpf(-19.0, -10.0, quality), pitch * 0.70, event)
 			hit_duck = 0.16
 			if crowd_volume > 0:
 				crowd.stop()
@@ -91,8 +92,8 @@ func play(event: Dictionary) -> void:
 				reaction.play()
 			return
 		"block":
-			play_sample("block_hit", -2.5, pitch * 0.86, event)
-			play_sample("spike_hit", -13.0, pitch * 0.74, event)
+			play_sample("block_hit", lerpf(-7.0, -1.5, quality), pitch * lerpf(0.80, 0.90, quality), event)
+			play_sample("spike_hit", lerpf(-19.0, -10.0, quality), pitch * 0.74, event)
 			return
 		"receive", "free", "dive": play_sample("receive_hit", -9.0, pitch, event); return
 		"set": play_sample("set_hit", -15.0, pitch * 1.05, event); return

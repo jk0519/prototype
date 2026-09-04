@@ -24,7 +24,7 @@ func advance(dt: float) -> void:
 
 func add_event(event: Dictionary) -> void:
 	if event.kind in ["serve", "receive", "set", "spike", "block", "dive", "free", "net"]:
-		effects.append({"position": event.position, "kind": event.kind, "age": 0.0})
+		effects.append({"position": event.position, "kind": event.kind, "age": 0.0, "quality": float(event.get("quality", 0.62)), "speed": float(event.get("speed", 0.0))})
 
 func ellipse(center: Vector2, radius: Vector2, color: Color) -> void:
 	var points = PackedVector2Array()
@@ -76,17 +76,25 @@ func _draw() -> void:
 	for effect in effects:
 		var pos = Vector2(effect.position.x, -effect.position.y)
 		var alpha = clampf(1 - effect.age / 0.42, 0, 1)
-		var color = ORANGE if effect.kind in ["spike", "block"] else BLUE
-		var radius = 18 + effect.age * 155
+		var quality: float = effect.quality
+		var perfect = quality >= 0.86 and effect.kind in ["serve", "spike", "block"]
+		var color = Color("ffe46b") if perfect else (ORANGE if effect.kind in ["spike", "block"] else BLUE)
+		var radius = 18 + effect.age * lerpf(135, 245, quality)
 		draw_arc(pos, radius, 0, TAU, 32, Color(color, alpha * 0.82), 3.2, true)
 		if effect.kind in ["serve", "spike", "block"]:
 			var flash = clampf(1 - effect.age / 0.13, 0, 1)
-			draw_circle(pos, 24 * flash, Color(CREAM, flash * 0.24))
-			for i in range(10):
-				var ray = Vector2.from_angle(i * TAU / 10 + 0.16) * (42 + effect.age * 170)
+			draw_circle(pos, lerpf(17, 32, quality) * flash, Color(CREAM, flash * lerpf(0.18, 0.38, quality)))
+			var ray_count = 8 + roundi(quality * 8)
+			for i in range(ray_count):
+				var ray = Vector2.from_angle(i * TAU / ray_count + 0.16) * (42 + effect.age * lerpf(145, 245, quality))
 				draw_line(pos + ray * 0.38, pos + ray, Color(CREAM, alpha * 0.8), 3.0, true)
-		if effect.kind in ["spike", "block", "set"]:
-			caption(pos + Vector2(0, -35 - effect.age * 45), effect.kind.to_upper(), 17, Color(CREAM, alpha), true)
+		if effect.kind in ["serve", "spike", "block"]:
+			var grade = "PERFECT" if quality >= 0.86 else ("SOLID" if quality >= 0.60 else "GLANCE")
+			caption(pos + Vector2(0, -66 - effect.age * 45), "%s %s" % [grade, effect.kind.to_upper()], 18, Color(color, alpha), true)
+			if effect.speed > 0:
+				caption(pos + Vector2(0, -47 - effect.age * 45), "%d km/h" % roundi(effect.speed * 0.058), 13, Color(CREAM, alpha * 0.88), true)
+		elif effect.kind == "set":
+			caption(pos + Vector2(0, -35 - effect.age * 45), "SET", 17, Color(CREAM, alpha), true)
 
 func draw_arena() -> void:
 	draw_rect(Rect2(-2000, -2200, 6000, 3500), Color("0c1625"))
@@ -315,9 +323,11 @@ func draw_player(p) -> void:
 
 	var label_at = origin + Vector2(0, -p.config.height - 49)
 	if p.id == game.human_id:
-		label_at.y -= 12
-		caption(label_at + Vector2(0, -10), "YOU", 16, CREAM, true)
-		draw_colored_polygon(PackedVector2Array([label_at + Vector2(-7, -2), label_at + Vector2(7, -2), label_at + Vector2(0, 6)]), BLUE)
+		# Contact grade and speed occupy this space during a swing.
+		if p.swing_elapsed < 0:
+			label_at.y -= 12
+			caption(label_at + Vector2(0, -10), "YOU", 16, CREAM, true)
+			draw_colored_polygon(PackedVector2Array([label_at + Vector2(-7, -2), label_at + Vector2(7, -2), label_at + Vector2(0, 6)]), BLUE)
 	else:
 		var tag = Rect2(origin.x - 18, origin.y + 24, 36, 18)
 		draw_style_box(seat_style(Color(INK, 0.72)), tag)
@@ -341,4 +351,12 @@ func draw_toss_guide() -> void:
 	var apex_at = game.toss_origin() + game.toss_velocity() * (game.toss_velocity().y / game.BALL_GRAVITY)
 	apex_at.y = -game.toss_height
 	draw_line(apex_at - Vector2(15, 0), apex_at + Vector2(15, 0), BLUE, 2)
-	caption(apex_at + Vector2(0, -17), "TOSS", 13, CREAM, true)
+	var vertical = roundi(inverse_lerp(game.TOSS_MIN_HEIGHT, game.TOSS_MAX_HEIGHT, game.toss_height) * 100)
+	caption(apex_at + Vector2(0, -17), "VERTICAL %d%%" % vertical, 13, CREAM, true)
+	var meter_x = game.toss_origin().x - game.players[game.server_id].facing * 48
+	var meter_top = -game.TOSS_MAX_HEIGHT
+	var meter_bottom = -game.TOSS_MIN_HEIGHT
+	draw_line(Vector2(meter_x, meter_top), Vector2(meter_x, meter_bottom), Color(BLUE, 0.24), 2)
+	draw_line(Vector2(meter_x - 8, apex_at.y), Vector2(meter_x + 8, apex_at.y), BLUE, 3)
+	draw_colored_polygon(PackedVector2Array([Vector2(meter_x, meter_top - 9), Vector2(meter_x - 5, meter_top), Vector2(meter_x + 5, meter_top)]), Color(BLUE, 0.8))
+	draw_colored_polygon(PackedVector2Array([Vector2(meter_x, meter_bottom + 9), Vector2(meter_x - 5, meter_bottom), Vector2(meter_x + 5, meter_bottom)]), Color(BLUE, 0.8))

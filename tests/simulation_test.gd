@@ -26,7 +26,11 @@ func check_human_control() -> void:
 	expect(game.phase == "serve_ready", "Human serve waits for toss input")
 	expect(game.players[0].pos.x == x, "AI must not move the human")
 	for i in range(60): game.step(1.0 / 120.0, {"toss": true, "aim_height": 1.0, "move": 1.0})
-	expect(game.phase == "serve_aim" and game.toss_height > 650 and game.toss_forward > 270, "Aim keys adjust toss height and distance")
+	expect(game.phase == "serve_aim" and game.toss_height > 740 and game.toss_forward > 300, "Aim keys adjust toss height and distance")
+	var high_toss = game.toss_height
+	var forward_toss = game.toss_forward
+	for i in range(24): game.step(1.0 / 120.0, {"toss": true, "aim_height": -1.0})
+	expect(game.toss_height < high_toss - 75 and is_equal_approx(game.toss_forward, forward_toss), "Vertical input independently lowers the serve toss")
 	expect(game.players[0].pos.x == x, "Aiming adjusts the arc without sliding the player")
 	game.step(1.0 / 120.0)
 	expect(game.phase == "serve_windup", "Releasing toss starts the throwing motion")
@@ -80,6 +84,18 @@ func check_human_control() -> void:
 	athlete.confirm_hit()
 	for i in range(8): athlete.step(1.0 / 120.0, {})
 	expect(athlete.swing_elapsed > 0.12 and athlete.swing_timer == 0, "Follow-through cannot hit the ball twice")
+	var pose_player = MatchModel.new().players[0]
+	pose_player.serve_pose = "windup"
+	pose_player.serve_pose_time = 0.22
+	var serve_pose = pose_player.skeleton()
+	expect(serve_pose.shoulder.x - serve_pose.hip.x < -18, "Serve windup loads the torso sideways")
+	pose_player.pos.y = 150
+	pose_player.swing_elapsed = 0.035
+	var coil_pose = pose_player.skeleton()
+	pose_player.swing_elapsed = 0.118
+	var strike_pose = pose_player.skeleton()
+	expect(coil_pose.shoulder.x - coil_pose.hip.x < -25, "Spike begins with a backward whole-body coil")
+	expect(strike_pose.shoulder.x - strike_pose.hip.x > 34 and strike_pose.head.x - strike_pose.hip.x > 42, "Spike snaps the torso and head sideways through contact")
 
 func check_rules() -> void:
 	var game = MatchModel.new()
@@ -133,18 +149,21 @@ func check_rules() -> void:
 	impact_game.last_action = "set"
 	impact_game.touches = 2
 	impact_game.players[0].pos.y = 190
-	impact_game.ball = Vector2(790, 315)
+	impact_game.players[0].swing_elapsed = 0.082
+	impact_game.ball = impact_game.players[0].contact_center("spike")
+	impact_game.previous_ball = impact_game.ball
 	impact_game.contact(impact_game.players[0], "spike")
-	expect(impact_game.ball_velocity.x > 1800 and impact_game.ball_velocity.length() > 1850, "Spike leaves the hand at decisive attack speed")
+	expect(impact_game.events[-1].quality >= 0.86 and impact_game.ball_velocity.x > 2200, "Centered contact in the snap window earns a perfect high-speed spike")
+	expect(impact_game.best_hit_speed == impact_game.events[-1].speed, "Human contact stores a personal best speed for the match")
 	impact_game = MatchModel.new(5)
 	impact_game.phase = "rally"
 	impact_game.last_team = 1
 	impact_game.last_player = 3
 	impact_game.last_action = "spike"
 	impact_game.touches = 3
-	impact_game.ball_velocity = Vector2(-1200, -180)
+	impact_game.ball_velocity = Vector2(-1900, -300)
 	impact_game.contact(impact_game.players[2], "block")
-	expect(impact_game.ball_velocity.x > 1150 and impact_game.ball_velocity.y <= -370, "Block sharply redirects the incoming spike")
+	expect(impact_game.events[-1].quality > 0.75 and impact_game.ball_velocity.x > 1850 and impact_game.ball_velocity.y < -425, "Fast spike produces a forceful high-grade block rebound")
 
 func check_match(seed_value: int) -> void:
 	var game = MatchModel.new(seed_value)

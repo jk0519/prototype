@@ -86,9 +86,11 @@ func install_inputs() -> void:
 		var event = InputEventKey.new()
 		event.physical_keycode = keys[action]
 		InputMap.action_add_event(action, event)
-	# Arrow keys are a second movement option, unless explicitly rebound elsewhere.
-	for action in ["left", "right"]:
-		var arrow = KEY_LEFT if action == "left" else KEY_RIGHT
+	# Arrow keys mirror horizontal movement and vertical toss aiming unless one
+	# has been explicitly assigned to another action.
+	var secondary = {"left": KEY_LEFT, "right": KEY_RIGHT, "toss_raise": KEY_UP, "toss_lower": KEY_DOWN}
+	for action in secondary:
+		var arrow = secondary[action]
 		if not keys.values().has(arrow):
 			var event = InputEventKey.new()
 			event.physical_keycode = arrow
@@ -121,13 +123,15 @@ func _physics_process(dt: float) -> void:
 		court.add_event(event)
 		sound.play(event)
 		if event.kind in ["spike", "serve"]:
-			shake = 10.0 if effects_on else 0.0
-			impact_hold = 0.060 if effects_on else 0.0
-			impact_zoom = 0.110 if effects_on else 0.0
+			var quality = float(event.get("quality", 0.62))
+			shake = lerpf(6.0, 14.0, quality) if effects_on else 0.0
+			impact_hold = lerpf(0.028, 0.078, quality) if effects_on else 0.0
+			impact_zoom = lerpf(0.055, 0.155, quality) if effects_on else 0.0
 		elif event.kind == "block":
-			shake = 8.0 if effects_on else 0.0
-			impact_hold = 0.045 if effects_on else 0.0
-			impact_zoom = 0.085 if effects_on else 0.0
+			var quality = float(event.get("quality", 0.62))
+			shake = lerpf(5.0, 12.0, quality) if effects_on else 0.0
+			impact_hold = lerpf(0.022, 0.060, quality) if effects_on else 0.0
+			impact_zoom = lerpf(0.045, 0.115, quality) if effects_on else 0.0
 	sound.update(game, dt)
 	if game.phase == "finished":
 		show_result()
@@ -290,7 +294,7 @@ func add_menu_button(label: String, action: Callable, primary: bool = false) -> 
 func show_title() -> void:
 	mode = "title"
 	clear_menu()
-	add_label("COURT 01  /  IMPACT BUILD", 11, Color("91b7c9"))
+	add_label("COURT 01  /  CONTACT BUILD", 11, Color("91b7c9"))
 	add_label("SIDEOUT", 50)
 	add_label("Toss. Approach. Jump. Connect.", 17, Color("b6cbd3"))
 	add_label("You play wing spiker. Your setter and blocker play\nautomatically. Beat the opposing trio to 15, win by 2.", 13, Color("8faaba"))

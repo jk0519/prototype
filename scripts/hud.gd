@@ -44,8 +44,10 @@ func _draw() -> void:
 	draw_circle(Vector2(serve_x, 59), 3.5, BLUE if game.serving_team == 0 else ORANGE)
 	box(Rect2(26, 99, 135, 32), Color(0.05, 0.10, 0.17, 0.78), 8)
 	text_at(Vector2(39, 120), "YOU  /  WING SPIKER", 10, BLUE)
+	if game.best_hit_speed > 0:
+		text_at(Vector2(31, 148), "BEST  %d km/h" % roundi(game.best_hit_speed * 0.058), 11, Color("ffe46b"))
 	if autoplay:
-		text_at(Vector2(32, 151), "AUTOPLAY TEST", 10, ORANGE)
+		text_at(Vector2(32, 166), "AUTOPLAY TEST", 10, ORANGE)
 	if game.phase.begins_with("serve_"):
 		var own_serve = game.server_id == game.human_id and not autoplay
 		var prompt = "YOUR JUMP SERVE" if own_serve else ("TEAMMATE SERVING" if game.serving_team == 0 else "OPPONENT SERVING")
@@ -54,8 +56,10 @@ func _draw() -> void:
 			match game.phase:
 				"serve_ready": hint = "Hold %s to aim your toss" % key_names.get("block", "X")
 				"serve_aim":
-					prompt = "%s / %s  DISTANCE    %s / %s  HEIGHT" % [key_names.get("left", "A"), key_names.get("right", "D"), key_names.get("toss_raise", "W"), key_names.get("toss_lower", "S")]
-					hint = "Release %s to toss" % key_names.get("block", "X")
+					prompt = "%s / %s  HORIZONTAL    %s / %s  VERTICAL" % [key_names.get("left", "A"), key_names.get("right", "D"), key_names.get("toss_raise", "W"), key_names.get("toss_lower", "S")]
+					var vertical = roundi(inverse_lerp(game.TOSS_MIN_HEIGHT, game.TOSS_MAX_HEIGHT, game.toss_height) * 100)
+					var forward = roundi(inverse_lerp(game.TOSS_MIN_FORWARD, game.TOSS_MAX_FORWARD, game.toss_forward) * 100)
+					hint = "VERTICAL %d%%  ·  FORWARD %d%%  ·  RELEASE %s" % [vertical, forward, key_names.get("block", "X")]
 				"serve_windup": hint = "Get ready to approach"
 				"serve_toss": hint = "Approach, %s to jump, then %s to hit" % [key_names.get("jump", "Z"), key_names.get("jump", "Z")]
 		box(Rect2(w / 2 - 218, 138, 436, 63), Color(0.055, 0.10, 0.17, 0.92), 12, Color("334d60"))

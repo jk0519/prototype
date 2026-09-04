@@ -9,6 +9,10 @@ const NET_X: float = 1000.0
 const NET_HEIGHT: float = 207.0
 const COURT_LEFT: float = 180.0
 const COURT_RIGHT: float = 1820.0
+const TOSS_MIN_HEIGHT: float = 340.0
+const TOSS_MAX_HEIGHT: float = 940.0
+const TOSS_MIN_FORWARD: float = 55.0
+const TOSS_MAX_FORWARD: float = 440.0
 
 var players: Array = []
 var ai = AI.new()
@@ -39,6 +43,7 @@ var point_reason: String = ""
 var rally_contacts: int = 0
 var rally_time: float = 0.0
 var longest_rally: int = 0
+var best_hit_speed: float = 0.0
 var events: Array = []
 var history: Array = []
 var metrics: Dictionary = {}
@@ -63,6 +68,7 @@ func reset() -> void:
 	server_id = 0
 	time = 0
 	longest_rally = 0
+	best_hit_speed = 0
 	history.clear()
 	metrics = {"serve": 0, "receive": 0, "set": 0, "spike": 0, "block": 0, "free": 0, "dive": 0, "net": 0, "points": 0}
 	prepare_serve()
@@ -162,8 +168,8 @@ func step(dt: float, human_intent: Dictionary = {}, all_ai: bool = false) -> voi
 			phase = "serve_aim"
 			phase_time = 0
 		if phase == "serve_aim":
-			toss_forward = clampf(toss_forward + input.get("move", 0.0) * server.facing * dt * 160, 70, 370)
-			toss_height = clampf(toss_height + input.get("aim_height", 0.0) * dt * 230, 390, 820)
+			toss_forward = clampf(toss_forward + input.get("move", 0.0) * server.facing * dt * 220, TOSS_MIN_FORWARD, TOSS_MAX_FORWARD)
+			toss_height = clampf(toss_height + input.get("aim_height", 0.0) * dt * 420, TOSS_MIN_HEIGHT, TOSS_MAX_HEIGHT)
 			serve_charge = minf(1, serve_charge + dt * 0.65)
 			if phase_time > 0.1 and not input.get("toss", false):
 				phase = "serve_windup"
@@ -234,13 +240,27 @@ func step_ball(dt: float) -> void:
 		award_point(1 - last_team if last_team >= 0 else 1 - serving_team, "OUT")
 
 func within_contact(p, action: String, radius: Vector2) -> bool:
+	return contact_alignment(p, action, radius) > 0
+
+func contact_alignment(p, action: String, radius: Vector2) -> float:
 	var center = p.contact_center(action)
 	# Test the segment, not just the last position. Contact radii include the ball.
 	var a = (previous_ball - center) / radius
 	var b = (ball - center) / radius
 	var segment = b - a
 	var u = clampf(-a.dot(segment) / maxf(segment.length_squared(), 0.0001), 0, 1)
-	return (a + segment * u).length_squared() <= 1.0
+	return 1.0 - clampf((a + segment * u).length(), 0, 1)
+
+func strike_quality(p, action: String) -> float:
+	var radius = Vector2(42, 38) if action == "serve" else Vector2(46, 42)
+	var center = p.contact_center(action)
+	var horizontal = 1.0 - clampf(absf(ball.x - center.x) / radius.x, 0, 1)
+	var timing = 0.55
+	if p.swing_elapsed >= 0:
+		timing = 1.0 - clampf(absf(p.swing_elapsed - 0.082) / 0.052, 0, 1)
+	# The ball first crosses the outside of the swept contact ellipse, so grade
+	# horizontal hand placement separately from the swing-frame timing.
+	return clampf(0.18 + 0.82 * (timing * 0.72 + horizontal * 0.28), 0.18, 1.0)
 
 func check_contacts() -> void:
 	if phase == "serve_toss":
@@ -276,6 +296,7 @@ func check_contacts() -> void:
 			return
 
 func serve(p) -> void:
+	var quality = strike_quality(p, "serve")
 	phase = "rally"
 	phase_time = 0
 	last_team = p.team
@@ -287,11 +308,14 @@ func serve(p) -> void:
 	p.serve_pose = ""
 	ball = p.contact_center("serve") + Vector2(p.facing * BALL_RADIUS, 0)
 	var target = 1580.0 + rng.randf_range(-120, 120) if p.team == 0 else 420.0 + rng.randf_range(-120, 120)
-	var power = clampf((ball.y - 210) / 110.0, 0, 1)
-	var flight = maxf(0.60, absf(target - ball.x) / lerpf(1750, 2200, power))
+	var height_power = clampf((ball.y - 205) / 135.0, 0, 1)
+	var strike_speed = p.config.spike_speed * lerpf(0.78, 1.18, quality) * lerpf(0.92, 1.05, height_power)
+	var flight = maxf(0.48, absf(target - ball.x) / strike_speed)
 	ball_velocity = arc_to(Vector2(target, 75), flight)
+	if p.id == human_id:
+		best_hit_speed = maxf(best_hit_speed, ball_velocity.length())
 	rally_contacts += 1
-	emit_event("serve", ball, p.id)
+	emit_event("serve", ball, p.id, {"quality": quality, "speed": ball_velocity.length()})
 
 func contact(p, action: String) -> void:
 	if action != "block" and p.id == last_player and last_action != "block":
@@ -311,17 +335,22 @@ func contact(p, action: String) -> void:
 	contact_lock = 0.13
 	p.contact_flash = 0.18
 	p.swing_timer = 0
+	var quality = 0.62
 	match action:
 		"block":
-			ball_velocity = Vector2(p.facing * maxf(1050, absf(ball_velocity.x) * 0.98), -380)
+			var incoming = ball_velocity.length()
+			quality = clampf((incoming - 700.0) / 1500.0, 0.25, 1.0)
+			ball_velocity = Vector2(p.facing * maxf(950, absf(ball_velocity.x) * lerpf(0.84, 1.05, quality)), -lerpf(270, 480, quality))
 		"spike":
+			quality = strike_quality(p, "spike")
 			p.confirm_hit(ball - Vector2(p.facing * BALL_RADIUS, 0))
 			ball = p.contact_center("spike") + Vector2(p.facing * BALL_RADIUS, 0)
 			var depth = rng.randf_range(430, 740)
 			if p.id == human_id:
 				depth = 605.0 - p.last_move * p.facing * 125.0
 			var target = NET_X + p.facing * depth
-			var flight = maxf(0.30, absf(target - ball.x) / p.config.spike_speed)
+			var strike_speed = p.config.spike_speed * lerpf(0.78, 1.22, quality)
+			var flight = maxf(0.28, absf(target - ball.x) / strike_speed)
 			ball_velocity = arc_to(Vector2(target, BALL_RADIUS), flight)
 		"set":
 			set_ball(p.team)
@@ -346,7 +375,12 @@ func contact(p, action: String) -> void:
 				action = "free"
 	last_action = action
 	rally_contacts += 1
-	emit_event(action, ball, p.id)
+	var details = {}
+	if action in ["spike", "block"]:
+		details = {"quality": quality, "speed": ball_velocity.length()}
+	if action == "spike" and p.id == human_id:
+		best_hit_speed = maxf(best_hit_speed, ball_velocity.length())
+	emit_event(action, ball, p.id, details)
 
 func set_ball(side: int) -> void:
 	var apex = maxf(370.0, ball.y + 60)
@@ -357,11 +391,13 @@ func set_ball(side: int) -> void:
 func arc_to(target: Vector2, flight: float) -> Vector2:
 	return Vector2((target.x - ball.x) / flight, (target.y - ball.y + 0.5 * BALL_GRAVITY * flight * flight) / flight)
 
-func emit_event(kind: String, position: Vector2, player_id: int = -1) -> void:
+func emit_event(kind: String, position: Vector2, player_id: int = -1, details: Dictionary = {}) -> void:
 	if kind in ["serve", "receive", "set", "spike", "block", "dive", "free"]:
 		refresh_ai_accuracy()
 	metrics[kind] = metrics.get(kind, 0) + 1
-	events.append({"kind": kind, "position": position, "player": player_id})
+	var event = {"kind": kind, "position": position, "player": player_id}
+	event.merge(details, true)
+	events.append(event)
 
 func award_point(winner: int, reason: String) -> void:
 	if phase in ["point", "finished"]:

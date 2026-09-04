@@ -1,4 +1,4 @@
-# SIDEOUT — impact and pace update
+# SIDEOUT — body mechanics and contact update
 
 A Mac-first, 2D volleyball prototype inspired by the basic play of The Spike: six athletes, one human wing spiker, and five AI players. Built in **Godot 4.7.2**, with original anime-style procedural athletes, a reactive camera, and recorded court audio.
 
@@ -16,14 +16,16 @@ You are the blue **#7 wing spiker**, marked **YOU**. Your setter (#2) and middle
 | Z | Jump; press again in the air to swing |
 | Hold X before your serve | Aim the toss; release X to throw the ball |
 | A / D while aiming | Shorter / longer toss |
-| W / S while aiming | Higher / lower toss |
+| W / S or up / down arrows while aiming | Higher / lower toss |
 | Hold Space | Receive and pass |
 | Hold X | Jump to block |
 | C | Slide/dive in your movement direction |
 | Esc | Pause/resume |
 | F11 | Toggle fullscreen (some Mac keyboards require Fn) |
 
-The first serve is yours. **Hold X** to see the parabolic toss guide. Adjust its distance with **A/D** and height with **W/S**, then **release X** to toss. Move under the ball with **D**, press **Z** to plant and jump as the ball starts descending, then press **Z again** when it reaches your striking hand. Tossing does not jump automatically. An untouched toss loses the point; the serve must be hit in the air. After serving, move into the court. For an attack, approach the net on your side, jump as your setter's ball rises, then press Z again when the ball reaches your hand. Moving toward the net as you hit aims the spike shorter; moving away aims deeper. Hold Space before a low ball arrives to pass it to the setter.
+The first serve is yours. **Hold X** to see the parabolic toss guide. Adjust its distance with **A/D** and its vertical height with **W/S** or the up/down arrows, then **release X** to toss. The live meter shows both values. Move under the ball with **D**, press **Z** to plant and jump as the ball starts descending, then press **Z again** when it reaches your striking hand. Tossing does not jump automatically. An untouched toss loses the point; the serve must be hit in the air. After serving, move into the court. For an attack, approach the net on your side, jump as your setter's ball rises, then press Z again when the ball reaches your hand. Moving toward the net as you hit aims the spike shorter; moving away aims deeper. Hold Space before a low ball arrives to pass it to the setter.
+
+Spike and serve results now depend on contact. The strongest hit comes from pressing Z so the hand reaches the ball during the torso snap and lining up the ball horizontally with the palm. **PERFECT**, **SOLID**, and **GLANCE** feedback changes the real launch speed, hit audio, flash, rays, camera kick, zoom, and impact hold. The HUD keeps your best hit speed for the match.
 
 Keyboard bindings, separate court/crowd volume sliders, sound, impact effects, and the optional landing guide are available under **Controls & settings** and are saved between sessions. Pause also provides restart and main-menu buttons; a completed match offers a rematch.
 
@@ -33,12 +35,14 @@ Keyboard bindings, separate court/crowd volume sliders, sound, impact effects, a
 - Human control of the left wing spiker; five AI players use the same movement and contact mechanics.
 - AI receiving, setting, attacking, blocking, serving, diving, and a fallback setter when the normal setter takes the first touch.
 - Adjustable jump serves with a displayed parabola, hand-led toss motion, approach, foot plant, takeoff, timed contact, follow-through, and landing compression. AI servers use the same mechanics.
+- Independent horizontal and vertical serve-toss aiming with wider, faster adjustment, a live percentage meter, and both WASD and arrow-key support.
 - Arcade-fast acceleration and movement, shorter jump airtime, running strides tied to distance, timed air swings, ground receives, blocks, and full-body dives.
 - Ball gravity, contact areas, a solid net, floor/out detection, three-touch and double-touch faults, and block touches that keep the ball live.
 - Role-based passing and set arcs, with actual contact timing determining whether a hit succeeds.
 - A full serve/rally/point/match-result loop, rotating servers on side-out, score display, and win-by-two scoring.
-- Six distinct outlined athletes with fitted uniforms, faces, hair, hands, shorts, and court shoes. The same joint poses drive tosses, runs, plants, jumps, strikes, blocks, receives, landings, and dives.
-- Longer ball and player streaks, contact bursts, swing arcs, a brief impact hold, punch zoom, strong camera shake, velocity look-ahead, and fast camera tracking. Blocks reverse the spike with a sharp downward rebound.
+- Six distinct outlined athletes with fitted uniforms, faces, hair, hands, shorts, and court shoes. The same joint system drives tosses, runs, plants, jumps, strikes, blocks, receives, landings, and dives. Serves and spikes animate a continuous backward coil, sideways hip-and-shoulder snap, head and torso flex, leg scissor, follow-through, and falling recovery.
+- Skill-graded spike and serve contact based on swing-frame timing and palm alignment. Contact quality changes actual ball speed and every feedback layer; the match records your best speed.
+- Longer ball and player streaks, graded contact bursts, swing arcs, a brief impact hold, punch zoom, strong camera shake, velocity look-ahead, and fast camera tracking. Blocks reverse the spike with a sharp downward rebound.
 - One clean recorded volleyball spike supplies a consistent contact family: full palm impact for spikes and serves, a short low block hit, softer pass/set cues, and a floor thump. A recorded swing whoosh leads attack contact. Selective shoe squeaks, slides, and landings keep routine AI movement from burying the ball. A quiet wordless crowd swell builds during serve preparation and releases at contact. Pause and mute stop ongoing audio.
 
 This is an arcade baseline. Roles stay in fixed formations; it does not implement regulation six-player rotations, back-row restrictions, or every official fault. AI difficulty and jump/spike timing need human playtesting. Teammates use simple ball/role rules; there is no call-for-set input. Online play, touch controls, player switching, progression, and authored sprite sheets are outside this version.

@@ -166,7 +166,6 @@ func skeleton() -> Dictionary:
 	crouch += 12 * (landing_timer / 0.16)
 	var bounce = absf(cos(run_clock)) * 2 if running else 0.0
 	var follow = clampf((swing_elapsed - 0.12) / 0.22, 0, 1) if swing_elapsed >= 0 else 0.0
-	lean += sin(follow * PI) * 13
 	var joints = {
 		"hip": Vector2(0, 40 * h - crouch + bounce),
 		"shoulder": Vector2(lean, 79 * h - crouch + bounce),
@@ -181,36 +180,72 @@ func skeleton() -> Dictionary:
 		"other_hand": Vector2(-14 - stride * 0.7, 44 + stride * 0.2)
 	}
 	if pos.y > 1:
+		var falling = clampf((-velocity.y + 40) / 620.0, 0, 1)
 		joints.back_knee = Vector2(-18, 26)
 		joints.back_foot = Vector2(-31 + follow * 13, 10)
 		joints.front_knee = Vector2(17 + follow * 5, 20)
 		joints.front_foot = Vector2(9 + follow * 10, 0)
-		joints.elbow = Vector2(-25, 102 * h)
-		joints.hand = Vector2(-18, config.reach - 5)
-		joints.other_elbow = Vector2(17, 100 * h)
-		joints.other_hand = Vector2(28, 119 * h)
+		joints.elbow = Vector2(-25, 102 * h).lerp(Vector2(18, 70), falling)
+		joints.hand = Vector2(-18, config.reach - 5).lerp(Vector2(8, 46), falling)
+		joints.other_elbow = Vector2(17, 100 * h).lerp(Vector2(-18, 68), falling)
+		joints.other_hand = Vector2(28, 119 * h).lerp(Vector2(-20, 47), falling)
 		joints.shoulder.x -= 4 * (1 - follow)
 		joints.head.x -= 3 * (1 - follow)
 	if serve_pose in ["ready", "aim", "windup"]:
 		var lift = smoothstep(0.03, 0.26, serve_pose_time) if serve_pose == "windup" else 0.0
+		# Load the torso away from the court as the tossing shoulder rises. The
+		# hip/shoulder separation makes the serve a whole-body throw.
+		var load = 0.24 if serve_pose == "aim" else lift
+		joints.hip.x = 6 * load
+		joints.shoulder.x = -17 * load
+		joints.shoulder.y += 3 * load
+		joints.head.x = -21 * load
+		joints.head.y += 2 * load
+		joints.back_knee.x -= 7 * load
+		joints.front_knee.x += 5 * load
 		joints.other_elbow = Vector2(15, lerpf(57, 94, lift))
 		joints.other_hand = Vector2(28, lerpf(78, 118, lift))
 		joints.elbow = Vector2(-20, 56)
 		joints.hand = Vector2(-29, 67)
 	elif serve_pose == "released" and serve_pose_time < 0.38 and pos.y < 1:
+		var release = smoothstep(0.0, 0.18, serve_pose_time)
+		joints.hip.x = lerpf(5, -6, release)
+		joints.shoulder.x = lerpf(-15, 18, release)
+		joints.head.x = lerpf(-19, 23, release)
 		joints.other_elbow = Vector2(20, 99)
 		joints.other_hand = Vector2(29, 125)
 	if swing_elapsed >= 0:
 		if swing_elapsed < 0.12:
-			var strike = smoothstep(SWING_WINDUP, 0.12, swing_elapsed)
-			joints.elbow = Vector2(-25, 104 * h).lerp(Vector2(16, config.reach - 15), strike)
-			joints.hand = Vector2(-22, config.reach - 4).lerp(Vector2(43, config.reach), strike)
+			# Coil back, then snap the shoulder past the hips. This creates the
+			# sideways bow seen in a real jump serve and spike instead of moving
+			# only the striking arm.
+			var windup = smoothstep(0.0, 0.035, swing_elapsed)
+			var strike = smoothstep(0.035, 0.115, swing_elapsed)
+			joints.hip = Vector2(0, 40 * h).lerp(Vector2(8, 42 * h), windup).lerp(Vector2(-10, 38 * h), strike)
+			joints.shoulder = Vector2(-4, 79 * h).lerp(Vector2(-21, 84 * h), windup).lerp(Vector2(27, 76 * h), strike)
+			joints.head = Vector2(-1, 101 * h).lerp(Vector2(-25, 108 * h), windup).lerp(Vector2(35, 96 * h), strike)
+			joints.back_knee = Vector2(-18, 26).lerp(Vector2(-22, 27), windup).lerp(Vector2(-28, 21), strike)
+			joints.back_foot = Vector2(-31, 10).lerp(Vector2(-36, 12), windup).lerp(Vector2(-43, 7), strike)
+			joints.front_knee = Vector2(17, 20).lerp(Vector2(18, 19), windup).lerp(Vector2(24, 26), strike)
+			joints.front_foot = Vector2(9, 0).lerp(Vector2(11, 0), windup).lerp(Vector2(22, 8), strike)
+			joints.elbow = Vector2(-25, 102 * h).lerp(Vector2(-31, 101 * h), windup).lerp(Vector2(20, config.reach - 14), strike)
+			joints.hand = Vector2(-18, config.reach - 5).lerp(Vector2(-36, config.reach - 8), windup).lerp(Vector2(52, config.reach + 3), strike)
+			joints.other_elbow = Vector2(17, 100 * h).lerp(Vector2(25, 103 * h), windup).lerp(Vector2(-7, 78 * h), strike)
+			joints.other_hand = Vector2(28, 119 * h).lerp(Vector2(36, config.reach - 3), windup).lerp(Vector2(-29, 57 * h), strike)
 		else:
 			var recovery = smoothstep(0.12, SWING_END, swing_elapsed)
-			joints.elbow = Vector2(16, config.reach - 15).lerp(Vector2(28, 68), recovery)
-			joints.hand = (impact_hand if swing_connected else Vector2(43, config.reach)).lerp(Vector2(5, 43), recovery)
-		joints.other_elbow = Vector2(13, 91).lerp(Vector2(-17, 63), minf(swing_elapsed / 0.15, 1))
-		joints.other_hand = Vector2(28, 113).lerp(Vector2(-22, 46), minf(swing_elapsed / 0.15, 1))
+			joints.hip.x = lerpf(-10, 1, recovery)
+			joints.hip.y = lerpf(38 * h, 40 * h, recovery)
+			joints.shoulder = Vector2(27, 76 * h).lerp(Vector2(-3, 79 * h), recovery) + Vector2(7, -7) * sin(recovery * PI)
+			joints.head = Vector2(35, 96 * h).lerp(Vector2(0, 101 * h), recovery) + Vector2(9, -8) * sin(recovery * PI)
+			joints.back_knee = Vector2(lerpf(-28, -15, recovery), lerpf(21, 27, recovery))
+			joints.back_foot = Vector2(lerpf(-43, -18, recovery), lerpf(7, 5, recovery))
+			joints.front_knee = Vector2(lerpf(24, 13, recovery), lerpf(26, 19, recovery))
+			joints.front_foot = Vector2(lerpf(22, 7, recovery), lerpf(8, 0, recovery))
+			joints.elbow = Vector2(20, config.reach - 14).lerp(Vector2(20, 69), recovery)
+			joints.hand = (impact_hand if swing_connected else Vector2(52, config.reach + 3)).lerp(Vector2(7, 45), recovery)
+			joints.other_elbow = Vector2(-7, 78 * h).lerp(Vector2(-18, 67), recovery)
+			joints.other_hand = Vector2(-29, 57 * h).lerp(Vector2(-20, 46), recovery)
 	elif blocking:
 		joints.elbow = Vector2(20, 107 * h)
 		joints.hand = Vector2(33, config.reach + 7)
