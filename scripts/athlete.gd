@@ -1,9 +1,9 @@
 extends RefCounted
 const Config = preload("res://scripts/player_config.gd")
-const SWING_WINDUP = 0.055
-const SWING_END = 0.46
-const DIVE_DURATION = 0.40
-const DIVE_RECOVERY = 0.34
+const SWING_WINDUP = 0.040
+const SWING_END = 0.34
+const DIVE_DURATION = 0.32
+const DIVE_RECOVERY = 0.22
 
 var id: int
 var team: int
@@ -87,14 +87,14 @@ func reset(x: float) -> void:
 
 func jump() -> void:
 	if pos.y <= 0.01 and jump_cooldown <= 0 and dive_timer <= 0 and jump_prepare <= 0:
-		jump_prepare = 0.085
-		jump_cooldown = 0.22
+		jump_prepare = 0.060
+		jump_cooldown = 0.16
 		motion_events.append("plant")
 
 func begin_swing() -> void:
 	if pos.y > 25 and swing_cooldown <= 0 and not blocking:
 		swing_elapsed = 0
-		swing_cooldown = SWING_END + 0.04
+		swing_cooldown = SWING_END + 0.02
 		swing_connected = false
 		motion_events.append("swing")
 
@@ -106,7 +106,7 @@ func confirm_hit(contact_position: Vector2 = Vector2.INF) -> void:
 		impact_hand.y = minf(impact_hand.y, config.reach + 20)
 	swing_connected = true
 	swing_timer = 0
-	swing_elapsed = 0.12
+	swing_elapsed = 0.105
 	contact_flash = 0.14
 
 func step(dt: float, intent: Dictionary) -> void:
@@ -117,7 +117,7 @@ func step(dt: float, intent: Dictionary) -> void:
 	if swing_elapsed >= 0:
 		swing_elapsed += dt
 		if swing_elapsed >= SWING_END: swing_elapsed = -1
-	swing_timer = 0.001 if swing_elapsed >= SWING_WINDUP and swing_elapsed < 0.17 and not swing_connected else 0.0
+	swing_timer = 0.001 if swing_elapsed >= SWING_WINDUP and swing_elapsed < 0.14 and not swing_connected else 0.0
 	var was_diving = dive_timer > 0
 	dive_timer = maxf(0, dive_timer - dt)
 	if dive_timer > 0:
@@ -143,7 +143,7 @@ func step(dt: float, intent: Dictionary) -> void:
 		dive_timer = DIVE_DURATION
 		dive_elapsed = 0.0
 		dive_recovery = 0.0
-		dive_cooldown = 1.0
+		dive_cooldown = 0.70
 		velocity.x = (move if absf(move) > 0.1 else facing) * config.dive_speed
 		motion_events.append("slide")
 	if intent.get("jump", false):
@@ -171,14 +171,14 @@ func step(dt: float, intent: Dictionary) -> void:
 			pos.y = 0
 			velocity.y = 0
 			blocking = false
-			landing_timer = 0.16
+			landing_timer = 0.12
 			motion_events.append("land")
 	if pos.y < 1 and dive_timer <= 0:
 		var distance = absf(pos.x - previous_pos.x)
-		run_clock += distance * PI / 72.0
+		run_clock += distance * PI / 94.0
 		step_distance += distance
-		if step_distance >= 72:
-			step_distance = fmod(step_distance, 72)
+		if step_distance >= 88:
+			step_distance = fmod(step_distance, 88)
 			motion_events.append("step")
 
 func skeleton() -> Dictionary:
@@ -192,8 +192,8 @@ func skeleton() -> Dictionary:
 	# Even the idle silhouette keeps a slight ready stance; receives compress it
 	# further. This avoids the rigid mannequin pose between contacts.
 	var crouch = (12.0 if receiving else 4.0) if pos.y < 1 else 0.0
-	if jump_prepare > 0: crouch += 17 * sin((1 - jump_prepare / 0.085) * PI * 0.75)
-	crouch += 12 * (landing_timer / 0.16)
+	if jump_prepare > 0: crouch += 17 * sin((1 - jump_prepare / 0.060) * PI * 0.75)
+	crouch += 12 * (landing_timer / 0.12)
 	var bounce = absf(cos(run_clock)) * 2.7 if running else 0.0
 	var back_lift = maxf(0, stride_wave) * 7.0
 	var front_lift = maxf(0, -stride_wave) * 7.0
@@ -215,7 +215,7 @@ func skeleton() -> Dictionary:
 	# A jump starts with a deep arm swing behind the hips. The feet leave only
 	# after that plant finishes, so takeoff reads as force rather than levitation.
 	if jump_prepare > 0:
-		var plant = smoothstep(0.0, 1.0, 1.0 - jump_prepare / 0.085)
+		var plant = smoothstep(0.0, 1.0, 1.0 - jump_prepare / 0.060)
 		joints.hip.x += lerpf(0, -7, plant)
 		joints.shoulder.x += lerpf(0, 8, plant)
 		joints.head.x += lerpf(0, 10, plant)

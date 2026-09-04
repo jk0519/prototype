@@ -1,5 +1,5 @@
 extends Node2D
-## Authored soft athlete poses driven by the simulation state.
+## Small, quiet athlete silhouettes. Speed, pose timing, and impact carry the action.
 var game
 var effects: Array = []
 var trail: Array = []
@@ -14,7 +14,7 @@ const NORTH_ATHLETE = preload("res://assets/art/animation/wing-spiker-north.png"
 const SOUTH_ATHLETE = preload("res://assets/art/animation/wing-spiker-south.png")
 const ATLAS_COLUMNS = 8
 const ATLAS_ROWS = 4
-const ATHLETE_DRAW_SIZE = 224.0
+const ATHLETE_DRAW_SIZE = 164.0
 const FRAME_BASELINE = 360.0 / 384.0
 const FRAME_CONTACT_PIXELS = {
 	12: Vector2(246, 5),
@@ -25,16 +25,33 @@ func advance(dt: float) -> void:
 	clock += dt
 	for effect in effects:
 		effect.age += dt
-	effects = effects.filter(func(e): return e.age < 0.42)
+	effects = effects.filter(func(e): return e.age < e.lifetime)
 	trail.append({"position": game.ball, "age": 0.0})
 	for item in trail:
 		item.age += dt
-	trail = trail.filter(func(item): return item.age < 0.20)
+	trail = trail.filter(func(item): return item.age < 0.18)
 	queue_redraw()
 
 func add_event(event: Dictionary) -> void:
-	if event.kind in ["serve", "receive", "set", "spike", "block", "dive", "free", "net"]:
-		effects.append({"position": event.position, "kind": event.kind, "age": 0.0, "quality": float(event.get("quality", 0.62)), "speed": float(event.get("speed", 0.0))})
+	if event.kind in ["serve", "receive", "set", "spike", "block", "dive", "free", "net", "plant", "takeoff", "land", "skid", "slide", "floor"]:
+		var kind: String = event.kind
+		var effect = {
+			"position": event.position,
+			"kind": kind,
+			"age": 0.0,
+			"lifetime": 0.52 if kind in ["serve", "spike", "block"] else 0.30,
+			"quality": float(event.get("quality", 0.62)),
+			"speed": float(event.get("speed", 0.0)),
+			"ball_velocity": game.ball_velocity,
+		}
+		var player_id = int(event.get("player", -1))
+		if player_id >= 0 and player_id < game.players.size():
+			var p = game.players[player_id]
+			effect["player_position"] = p.pos
+			effect["player_frame"] = athlete_frame(p)
+			effect["player_facing"] = p.facing
+			effect["player_team"] = p.team
+		effects.append(effect)
 
 func ellipse(center: Vector2, radius: Vector2, color: Color) -> void:
 	var points = PackedVector2Array()
@@ -63,49 +80,105 @@ func _draw() -> void:
 			draw_line(Vector2(x + 18, 6), Vector2(x + 36, 6), CREAM, 2)
 	for p in game.players:
 		var spread = 1.0 - clampf(p.pos.y / 1100.0, 0, 0.5)
-		ellipse(Vector2(p.pos.x, 8), Vector2(29 * spread, 7 * spread), Color(0.03, 0.10, 0.14, 0.3))
+		ellipse(Vector2(p.pos.x, 8), Vector2(22 * spread, 5 * spread), Color(0.03, 0.10, 0.14, 0.3))
 		if p.id == game.human_id:
-			ellipse(Vector2(p.pos.x, 8), Vector2(35, 9), Color(BLUE, 0.42))
+			ellipse(Vector2(p.pos.x, 8), Vector2(27, 7), Color(BLUE, 0.42))
 	draw_net()
+	draw_impact_afterimages()
 	for p in game.players:
 		draw_player(p)
 	if game.phase not in ["point", "finished", "serve_ready", "serve_aim", "serve_windup"]:
 		for item in trail:
-			var alpha = (1 - item.age / 0.20) * 0.32
+			var alpha = (1 - item.age / 0.18) * 0.40
 			var at = Vector2(item.position.x, -item.position.y)
-			draw_circle(at, 4 + 5 * (1 - item.age / 0.20), Color(CREAM, alpha))
+			draw_circle(at, 3 + 6 * (1 - item.age / 0.18), Color(CREAM, alpha))
 	var ball_screen = Vector2(game.ball.x, -game.ball.y)
 	var screen_velocity = Vector2(game.ball_velocity.x, -game.ball_velocity.y)
-	if screen_velocity.length() > 620 and game.phase == "rally":
+	if screen_velocity.length() > 560 and game.phase == "rally":
 		var back = -screen_velocity.normalized()
-		var length = clampf(screen_velocity.length() * 0.08, 55, 150)
-		for i in range(5):
-			var offset = back.orthogonal() * (i - 2) * 4
-			draw_line(ball_screen + back * 14 + offset, ball_screen + back * (length - abs(i - 2) * 11) + offset, Color(CREAM, 0.34 - abs(i - 2) * 0.045), 2.5, true)
+		var length = clampf(screen_velocity.length() * 0.10, 70, 240)
+		for i in range(7):
+			var offset = back.orthogonal() * (i - 3) * 3.5
+			draw_line(ball_screen + back * 13 + offset, ball_screen + back * (length - abs(i - 3) * 15) + offset, Color(CREAM, 0.44 - abs(i - 3) * 0.045), 2.5, true)
+	if screen_velocity.length() > 1100 and game.phase == "rally":
+		var stretch = clampf(screen_velocity.length() / 1250.0, 1.0, 2.7)
+		draw_set_transform(ball_screen, screen_velocity.angle(), Vector2.ONE)
+		ellipse(Vector2(-5 * stretch, 0), Vector2(11 * stretch, 8.5), Color(CREAM, 0.28))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	var spin_direction = -signf(game.ball_velocity.x) if absf(game.ball_velocity.x) > 1 else 1.0
 	draw_ball(Vector2(game.ball.x, -game.ball.y), game.time * (5.0 + game.ball_topspin * 0.012) * spin_direction)
 	for effect in effects:
 		var pos = Vector2(effect.position.x, -effect.position.y)
-		var alpha = clampf(1 - effect.age / 0.42, 0, 1)
+		var alpha = clampf(1 - effect.age / effect.lifetime, 0, 1)
 		var quality: float = effect.quality
 		var perfect = quality >= 0.86 and effect.kind in ["serve", "spike", "block"]
 		var color = Color("ffe46b") if perfect else (ORANGE if effect.kind in ["spike", "block"] else BLUE)
-		var radius = 18 + effect.age * lerpf(135, 245, quality)
-		draw_arc(pos, radius, 0, TAU, 32, Color(color, alpha * 0.82), 3.2, true)
+		var radius = 14 + effect.age * lerpf(240, 460, quality)
+		if effect.kind in ["serve", "spike", "block", "set", "receive", "net"]:
+			draw_arc(pos, radius, 0, TAU, 32, Color(color, alpha * 0.82), 3.2, true)
 		if effect.kind in ["serve", "spike", "block"]:
-			var flash = clampf(1 - effect.age / 0.13, 0, 1)
-			draw_circle(pos, lerpf(17, 32, quality) * flash, Color(CREAM, flash * lerpf(0.18, 0.38, quality)))
-			var ray_count = 8 + roundi(quality * 8)
+			var flash = clampf(1 - effect.age / 0.16, 0, 1)
+			draw_circle(pos, lerpf(22, 48, quality) * flash, Color(CREAM, flash * lerpf(0.24, 0.52, quality)))
+			var ray_count = 10 + roundi(quality * 12)
 			for i in range(ray_count):
-				var ray = Vector2.from_angle(i * TAU / ray_count + 0.16) * (42 + effect.age * lerpf(145, 245, quality))
-				draw_line(pos + ray * 0.38, pos + ray, Color(CREAM, alpha * 0.8), 3.0, true)
+				var ray = Vector2.from_angle(i * TAU / ray_count + 0.16) * (52 + effect.age * lerpf(260, 470, quality))
+				draw_line(pos + ray * 0.30, pos + ray, Color(CREAM, alpha * 0.86), 2.5 + quality * 2.0, true)
+			draw_attack_speed_lines(effect, pos, color)
+			var slash = Vector2(36, -72) * Vector2(signf(effect.ball_velocity.x), 1)
+			draw_line(pos - slash, pos + slash, Color(CREAM, flash * 0.9), 7.0, true)
+			draw_line(pos - slash * 0.65, pos + slash * 0.65, Color(color, flash), 2.5, true)
 		if effect.kind in ["serve", "spike", "block"]:
 			var grade = "PERFECT" if quality >= 0.86 else ("SOLID" if quality >= 0.60 else "GLANCE")
-			caption(pos + Vector2(0, -66 - effect.age * 45), "%s %s" % [grade, effect.kind.to_upper()], 18, Color(color, alpha), true)
-			if effect.speed > 0:
-				caption(pos + Vector2(0, -47 - effect.age * 45), "%d km/h" % roundi(effect.speed * 0.058), 13, Color(CREAM, alpha * 0.88), true)
+			caption(pos + Vector2(0, -76 - effect.age * 70), grade, 18, Color(color, alpha), true)
 		elif effect.kind == "set":
-			caption(pos + Vector2(0, -35 - effect.age * 45), "SET", 17, Color(CREAM, alpha), true)
+			caption(pos + Vector2(0, -35 - effect.age * 55), "SET", 15, Color(CREAM, alpha), true)
+		elif effect.kind in ["land", "skid", "slide", "floor"]:
+			var floor_pos = Vector2(pos.x, 2)
+			var spread = 22 + effect.age * (210 if effect.kind == "floor" else 125)
+			draw_line(floor_pos - Vector2(spread, 0), floor_pos + Vector2(spread, 0), Color(CREAM, alpha * 0.48), 3.0, true)
+			for i in range(5):
+				var side = -1.0 if i % 2 == 0 else 1.0
+				var dust = floor_pos + Vector2(side * (10 + i * 6 + effect.age * 85), -3 - i * 2)
+				draw_circle(dust, 3 + (4 - i) * 0.8, Color(CREAM, alpha * 0.26))
+	var wash = impact_wash_alpha()
+	if wash > 0:
+		draw_rect(Rect2(-2000, -2200, 6000, 3500), Color(CREAM, wash))
+
+func impact_wash_alpha() -> float:
+	var result = 0.0
+	for effect in effects:
+		if effect.kind in ["serve", "spike", "block"]:
+			result = maxf(result, clampf(1.0 - effect.age / 0.055, 0, 1) * lerpf(0.025, 0.095, effect.quality))
+	return result
+
+func draw_attack_speed_lines(effect: Dictionary, pos: Vector2, color: Color) -> void:
+	if effect.age > 0.19:
+		return
+	var life = 1.0 - effect.age / 0.19
+	var direction = signf(effect.ball_velocity.x)
+	if direction == 0: direction = 1.0
+	for i in range(13):
+		var lane = float(i - 6)
+		var start = pos + Vector2(-direction * (45 + absf(lane) * 12), lane * 32)
+		var length = (170 + absf(lane) * 30) * lerpf(0.72, 1.25, effect.quality)
+		draw_line(start, start - Vector2(direction * length, lane * 4), Color(color, life * (0.22 + effect.quality * 0.24)), 2.0 + effect.quality, true)
+
+func draw_impact_afterimages() -> void:
+	for effect in effects:
+		if effect.kind not in ["serve", "spike", "block"] or effect.age > 0.20 or not effect.has("player_position"):
+			continue
+		var life = 1.0 - effect.age / 0.20
+		var texture: Texture2D = NORTH_ATHLETE if effect.player_team == 0 else SOUTH_ATHLETE
+		var team_color = BLUE if effect.player_team == 0 else ORANGE
+		var direction = signf(effect.ball_velocity.x)
+		if direction == 0: direction = effect.player_facing
+		for copy in range(3, 0, -1):
+			var origin = Vector2(effect.player_position.x, -effect.player_position.y) - Vector2(direction * copy * 18, copy * 2)
+			draw_set_transform(origin, 0.0, Vector2(effect.player_facing, 1.0))
+			var size = ATHLETE_DRAW_SIZE * (1.0 + copy * 0.018)
+			var destination = Rect2(Vector2(-size * 0.5, -size * FRAME_BASELINE), Vector2.ONE * size)
+			draw_texture_rect_region(texture, destination, athlete_region(effect.player_frame, texture), Color(team_color, life * (0.11 + copy * 0.035)))
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 func draw_arena() -> void:
 	draw_rect(Rect2(-2000, -2200, 6000, 3500), Color("0c1625"))
@@ -182,21 +255,26 @@ func draw_net() -> void:
 
 func draw_motion_streaks(p, origin: Vector2, team_color: Color) -> void:
 	var speed = absf(p.velocity.x)
-	if speed > 245:
+	if speed > 260:
 		var back = -signf(p.velocity.x)
-		var strength = clampf((speed - 245) / 350.0, 0.12, 0.8)
-		for i in range(4):
-			var y = -12.0 - i * 13.0
+		var strength = clampf((speed - 260) / 430.0, 0.12, 0.9)
+		for i in range(6):
+			var y = -8.0 - i * 11.0
 			var start = origin + Vector2(back * (17 + i * 4), y)
-			draw_line(start, start + Vector2(back * (18 + speed * 0.08), i - 2), Color(team_color, strength * (0.34 - i * 0.045)), 2.0, true)
+			draw_line(start, start + Vector2(back * (26 + speed * 0.10), i - 3), Color(team_color, strength * (0.38 - i * 0.04)), 2.0, true)
 	if p.jump_prepare > 0:
-		var pulse = 1.0 - p.jump_prepare / 0.085
-		draw_arc(origin + Vector2(0, 4), 18 + pulse * 18, PI, TAU, 18, Color(team_color, 0.6 * (1 - pulse)), 3, true)
+		var pulse = 1.0 - p.jump_prepare / 0.060
+		draw_arc(origin + Vector2(0, 4), 14 + pulse * 30, PI, TAU, 18, Color(team_color, 0.75 * (1 - pulse)), 3, true)
+	if p.pos.y > 30 and p.velocity.y > 280:
+		var rise = clampf(p.velocity.y / p.config.jump_speed, 0.0, 1.0)
+		for i in range(4):
+			var x = (i - 1.5) * 11
+			draw_line(origin + Vector2(x, 10), origin + Vector2(x * 1.4, 44 + rise * 35), Color(team_color, rise * 0.28), 2.0, true)
 	if p.swing_elapsed >= 0 and p.pos.y > 25:
-		var sweep = clampf(p.swing_elapsed / 0.18, 0, 1)
+		var sweep = clampf(p.swing_elapsed / 0.13, 0, 1)
 		var from = -2.6 if p.facing > 0 else -0.55
 		var to = -0.2 if p.facing > 0 else -2.95
-		draw_arc(origin + Vector2(0, -78), 61, from, lerpf(from, to, sweep), 20, Color(team_color, 0.18 + 0.28 * (1 - sweep)), 5, true)
+		draw_arc(origin + Vector2(0, -58), 54, from, lerpf(from, to, sweep), 20, Color(team_color, 0.22 + 0.42 * (1 - sweep)), 6, true)
 
 func athlete_frame(p) -> int:
 	if p.dive_timer > 0:
@@ -210,18 +288,18 @@ func athlete_frame(p) -> int:
 		return 17 if p.serve_pose_time < 0.14 else 18
 	if serving_action:
 		if p.swing_elapsed >= 0:
-			if p.swing_elapsed < 0.080: return 21
-			if p.swing_elapsed < 0.170: return 22
+			if p.swing_elapsed < 0.055: return 21
+			if p.swing_elapsed < 0.135: return 22
 			return 23
 		if p.jump_prepare > 0: return 19
 		if p.pos.y > 1: return 20
 		if absf(p.velocity.x) > 20: return 19
 		return 18
 	if p.swing_elapsed >= 0:
-		if p.swing_elapsed < 0.080: return 11
-		if p.swing_elapsed < 0.160: return 12
-		if p.swing_elapsed < 0.240: return 13
-		if p.swing_elapsed < 0.340: return 14
+		if p.swing_elapsed < 0.055: return 11
+		if p.swing_elapsed < 0.135: return 12
+		if p.swing_elapsed < 0.190: return 13
+		if p.swing_elapsed < 0.265: return 14
 		return 15
 	if p.blocking:
 		return 29 if p.pos.y > 35 or p.contact_flash > 0 else 28
@@ -230,7 +308,7 @@ func athlete_frame(p) -> int:
 	if p.receiving:
 		return 25 if p.contact_flash > 0 else 24
 	if p.jump_prepare > 0:
-		return 8 if p.jump_prepare > 0.055 else 9
+		return 8 if p.jump_prepare > 0.035 else 9
 	if p.pos.y > 1:
 		return 10 if p.velocity.y > p.config.jump_speed * 0.55 else 11
 	if p.landing_timer > 0:
@@ -254,8 +332,28 @@ func draw_player(p) -> void:
 	var origin = Vector2(p.pos.x, -p.pos.y)
 	var frame = athlete_frame(p)
 	var texture: Texture2D = NORTH_ATHLETE if p.team == 0 else SOUTH_ATHLETE
+	var pose_scale = Vector2.ONE
+	var pose_rotation = 0.0
+	if p.dive_timer > 0:
+		pose_scale = Vector2(1.12, 0.90)
+	elif p.jump_prepare > 0:
+		var plant = 1.0 - p.jump_prepare / 0.060
+		pose_scale = Vector2(1.0 + plant * 0.16, 1.0 - plant * 0.18)
+	elif p.swing_elapsed >= 0 and not p.swing_connected:
+		if p.swing_elapsed < 0.055:
+			pose_rotation = -p.facing * lerpf(0.04, 0.15, p.swing_elapsed / 0.055)
+			pose_scale = Vector2(0.94, 1.08)
+		else:
+			pose_rotation = p.facing * 0.10
+			pose_scale = Vector2(1.10, 0.94)
+	elif p.pos.y > 1:
+		pose_scale = Vector2(0.95, 1.07 if p.velocity.y > 0 else 1.02)
+	elif absf(p.velocity.x) > 220:
+		pose_rotation = signf(p.velocity.x) * 0.055
+		var stride = absf(sin(p.run_clock))
+		pose_scale = Vector2(1.0 + stride * 0.045, 1.0 - stride * 0.035)
 	draw_motion_streaks(p, origin, BLUE if p.team == 0 else ORANGE)
-	draw_set_transform(origin, 0.0, Vector2(p.facing, 1.0))
+	draw_set_transform(origin, pose_rotation, Vector2(p.facing * pose_scale.x, pose_scale.y))
 	var destination = Rect2(Vector2(-ATHLETE_DRAW_SIZE * 0.5, -ATHLETE_DRAW_SIZE * FRAME_BASELINE), Vector2.ONE * ATHLETE_DRAW_SIZE)
 	if p.swing_connected and FRAME_CONTACT_PIXELS.has(frame):
 		var art_hand = (FRAME_CONTACT_PIXELS[frame] - Vector2(192, 360)) * (ATHLETE_DRAW_SIZE / 384.0)
@@ -269,16 +367,10 @@ func draw_player(p) -> void:
 		for i in range(5):
 			var direction = Vector2.from_angle(-1.7 + i * 0.27) * Vector2(p.facing, 1)
 			draw_line(burst - direction * 6, burst - direction * (18 + i * 3), Color(CREAM, alpha * 0.75), 2.4, true)
-	var label_at = origin + Vector2(0, -p.config.height - 49)
+	var label_at = origin + Vector2(0, -ATHLETE_DRAW_SIZE * 0.96)
 	if p.id == game.human_id:
 		if p.swing_elapsed < 0:
-			label_at.y -= 12
-			caption(label_at + Vector2(0, -10), "YOU", 16, CREAM, true)
-			draw_colored_polygon(PackedVector2Array([label_at + Vector2(-7, -2), label_at + Vector2(7, -2), label_at + Vector2(0, 6)]), BLUE)
-	else:
-		var tag = Rect2(origin.x - 18, origin.y + 24, 36, 18)
-		draw_style_box(seat_style(Color(INK, 0.72)), tag)
-		caption(origin + Vector2(0, 37), p.role, 11, Color(CREAM, 0.9), true)
+			draw_colored_polygon(PackedVector2Array([label_at + Vector2(-6, -4), label_at + Vector2(6, -4), label_at + Vector2(0, 4)]), BLUE)
 
 func draw_ball(pos: Vector2, rotation_angle: float) -> void:
 	draw_circle(pos + Vector2(1, 2), 13, Color(INK, 0.3))

@@ -124,14 +124,14 @@ func _physics_process(dt: float) -> void:
 		sound.play(event)
 		if event.kind in ["spike", "serve"]:
 			var quality = float(event.get("quality", 0.62))
-			shake = lerpf(6.0, 14.0, quality) if effects_on else 0.0
-			impact_hold = lerpf(0.028, 0.078, quality) if effects_on else 0.0
-			impact_zoom = lerpf(0.055, 0.155, quality) if effects_on else 0.0
+			shake = lerpf(12.0, 28.0, quality) if effects_on else 0.0
+			impact_hold = lerpf(0.045, 0.115, quality) if effects_on else 0.0
+			impact_zoom = lerpf(0.11, 0.27, quality) if effects_on else 0.0
 		elif event.kind == "block":
 			var quality = float(event.get("quality", 0.62))
-			shake = lerpf(5.0, 12.0, quality) if effects_on else 0.0
-			impact_hold = lerpf(0.022, 0.060, quality) if effects_on else 0.0
-			impact_zoom = lerpf(0.045, 0.115, quality) if effects_on else 0.0
+			shake = lerpf(10.0, 24.0, quality) if effects_on else 0.0
+			impact_hold = lerpf(0.040, 0.100, quality) if effects_on else 0.0
+			impact_zoom = lerpf(0.09, 0.23, quality) if effects_on else 0.0
 	sound.update(game, dt)
 	if game.phase == "finished":
 		show_result()
@@ -161,29 +161,29 @@ func update_camera(dt: float) -> void:
 	var player_x = game.players[game.human_id].pos.x
 	var lo = minf(player_x, minf(game.ball.x, 900)) - 190
 	var hi = maxf(player_x, maxf(game.ball.x, 1100)) + 190
-	# Keep players large enough to read while the camera pans with the rally.
-	# High balls and cross-court chases still pull the view back automatically.
-	var span = clampf(hi - lo, 1120, 2380)
-	var top = maxf(500, game.ball.y + 100)
+	# Keep the court readable and the athletes small. The camera supplies energy
+	# through tracking and impact punches instead of framing large character art.
+	var span = clampf(hi - lo, 1680, 2480)
+	var top = maxf(660, game.ball.y + 130)
 	if game.phase in ["serve_aim", "serve_windup", "serve_toss"]: top = maxf(top, game.toss_height + 110)
-	var target_zoom = minf(viewport_size.x / span, viewport_size.y * 0.70 / top)
+	var target_zoom = clampf(minf(viewport_size.x / span, viewport_size.y * 0.70 / top), 0.46, 0.78)
 	var target_x = clampf((lo + hi) * 0.5, 400, 1560)
 	if mode == "playing" and game.phase == "rally":
 		target_x += clampf(game.ball_velocity.x * 0.05, -95, 95)
 	if mode == "title":
 		target_zoom = minf(viewport_size.x / 2120, viewport_size.y / 920)
 		target_x = 1000
-	target_zoom *= 1.0 + impact_zoom
+	target_zoom = minf(target_zoom * (1.0 + impact_zoom), 1.0)
 	var target_y = -viewport_size.y * 0.26 / target_zoom
 	if mode == "playing" and game.phase == "rally":
 		target_y -= clampf(game.ball_velocity.y * 0.035, -38, 38)
-	var tracking_rate = 5.5 + clampf(game.ball_velocity.length() / 230.0, 0, 7.0) if mode == "playing" else 4.2
+	var tracking_rate = 8.0 + clampf(game.ball_velocity.length() / 180.0, 0, 10.0) if mode == "playing" else 4.2
 	var speed = 1.0 - exp(-dt * tracking_rate)
 	camera.zoom = camera.zoom.lerp(Vector2.ONE * target_zoom, speed)
 	camera.position = camera.position.lerp(Vector2(target_x, target_y), speed)
-	shake = maxf(0, shake - dt * 28)
-	impact_zoom = maxf(0, impact_zoom - dt * 0.8)
-	camera.offset = Vector2(sin(run_elapsed * 105), cos(run_elapsed * 90)) * shake
+	shake = maxf(0, shake - dt * 46)
+	impact_zoom = maxf(0, impact_zoom - dt * 2.4)
+	camera.offset = Vector2(sin(run_elapsed * 137), cos(run_elapsed * 111)) * shake
 
 func _input(event: InputEvent) -> void:
 	if not event is InputEventKey or not event.pressed or event.echo:

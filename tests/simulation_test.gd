@@ -87,7 +87,7 @@ func check_human_control() -> void:
 	expect(athlete.swing_elapsed > 0.12 and athlete.swing_timer == 0, "Follow-through cannot hit the ball twice")
 	athlete.reset(400)
 	athlete.step(1.0 / 120.0, {"move": 1.0, "dive": true})
-	expect(athlete.dive_timer > 0.35 and athlete.velocity.x >= athlete.config.dive_speed, "Dive input launches a full-body floor save")
+	expect(athlete.dive_timer > 0.27 and athlete.velocity.x >= athlete.config.dive_speed, "Dive input launches a full-body floor save")
 	var dive_launch = athlete.skeleton()
 	for i in range(16): athlete.step(1.0 / 120.0, {})
 	var dive_extension = athlete.skeleton()
@@ -196,7 +196,7 @@ func check_arcade_mechanics() -> void:
 	game.ball = server.contact_center("serve")
 	game.previous_ball = game.ball
 	game.serve(server)
-	expect(game.ball_topspin > 1200 and game.ball_velocity.length() > 2700, "Perfect jump serve launches fast with strong topspin")
+	expect(game.ball_topspin > 2500 and game.ball_velocity.length() > 3500, "Perfect jump serve launches at extreme arcade speed with severe topspin")
 	var initial_vertical = game.ball_velocity.y
 	game.contact_lock = 2
 	game.step_ball(0.2)
@@ -206,7 +206,7 @@ func check_arcade_mechanics() -> void:
 	game.ball = Vector2(620, 155)
 	game.set_ball(0)
 	var set_apex = game.ball.y + game.ball_velocity.y * game.ball_velocity.y / (2.0 * game.BALL_GRAVITY)
-	expect(set_apex >= 509 and game.ball_topspin == 0, "Set rises into a large clean attack arc")
+	expect(set_apex >= 659 and game.ball_topspin == 0, "Set rises into an oversized clean attack arc")
 
 	game.phase = "rally"
 	game.last_team = 0

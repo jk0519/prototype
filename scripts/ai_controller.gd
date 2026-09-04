@@ -36,12 +36,12 @@ func intentions(game, all_ai: bool) -> Array:
 			# A high pass is taken above the forehead. The setter plants once,
 			# keeps the setting pose in the air, and contacts through the same
 			# physical hand area used on the ground.
-			var jump_set = game.ball.y > setter.config.height + 145
-			var contact_height = setter.config.height + (145 if jump_set else 15)
+			var jump_set = game.ball.y > setter.config.height + 170
+			var contact_height = setter.config.height + (210 if jump_set else 15)
 			var t = game.time_to_height(contact_height)
 			var x = game.ball.x + game.ball_velocity.x * t
 			var set_intent = {"move": toward(setter, x), "set": true}
-			if jump_set and setter.pos.y <= 0.01 and setter.jump_prepare <= 0 and t < 0.43:
+			if jump_set and setter.pos.y <= 0.01 and setter.jump_prepare <= 0 and t < 0.50:
 				set_intent["jump"] = true
 			result[setter_id] = set_intent
 			# Give the wing an approach while the pass travels toward the setter.
@@ -49,10 +49,10 @@ func intentions(game, all_ai: bool) -> Array:
 			result[wing.id] = {"move": toward(wing, game.attack_x(side) - wing.facing * 100)}
 		elif our_possession and game.touches == 2:
 			var hitter = game.players[side * 3]
-			var t = game.time_to_height(300)
+			var t = game.time_to_height(365)
 			var target_x = game.ball.x + game.ball_velocity.x * t - hitter.facing * 40 + game.ai_error_x[hitter.id] * 0.48
 			var intent = {"move": toward(hitter, target_x)}
-			if hitter.pos.y <= 0.01 and t <= 0.57 + game.ai_jump_error[hitter.id] and game.ball.y > 220:
+			if hitter.pos.y <= 0.01 and t <= 0.54 + game.ai_jump_error[hitter.id] and game.ball.y > 260:
 				intent["jump"] = true
 			if should_swing(game, hitter):
 				intent["swing"] = true
@@ -76,16 +76,16 @@ func intentions(game, all_ai: bool) -> Array:
 			if receiver_id >= 0 and landing > 175 and landing < 1825:
 				var receiver = game.players[receiver_id]
 				var intent = {"move": toward(receiver, landing - receiver.facing * 24 + game.ai_error_x[receiver.id] * (0.45 if game.last_action == "serve" else 1.0)), "receive": true}
-				if our_half and time_low < 0.32 and absf(receiver.pos.x - landing) > 58:
+				if our_half and time_low < 0.40 and absf(receiver.pos.x - landing) > 64:
 					intent["dive"] = true
 				result[receiver_id] = intent
 		# The middle follows the opposing attacker along the net and blocks.
 		var middle = game.players[side * 3 + 2]
 		if game.last_team == 1 - side and game.last_action == "set" and game.ai_block_attempt[side]:
-			var t = game.time_to_height(300)
+			var t = game.time_to_height(365)
 			var x = game.ball.x + game.ball_velocity.x * t
 			if absf(x - 1000.0) < 330:
-				result[middle.id] = {"move": toward(middle, 947 if side == 0 else 1053), "block": t < 0.60 + game.ai_jump_error[middle.id]}
+				result[middle.id] = {"move": toward(middle, 947 if side == 0 else 1053), "block": t < 0.56 + game.ai_jump_error[middle.id]}
 		elif middle.pos.y > 0 and middle.blocking:
 			result[middle.id]["block"] = true
 	return result

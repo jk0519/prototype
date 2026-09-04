@@ -1,6 +1,6 @@
-# SIDEOUT — agile athlete animation update
+# SIDEOUT — arcade impact prototype
 
-A Mac-first, 2D volleyball prototype inspired by the basic play of The Spike: six athletes, one human wing spiker, and five AI players. Built in **Godot 4.7.2**, with original faceless anime-style athletes, a reactive camera, and recorded court audio.
+A Mac-first, 2D volleyball prototype inspired by the basic play of The Spike: six athletes, one human wing spiker, and five AI players. Built in **Godot 4.7.2**, with small faceless athletes, deliberately extreme arcade motion, a reactive camera, and recorded court audio.
 
 ## Play on Mac
 
@@ -36,13 +36,13 @@ Keyboard bindings, separate court/crowd volume sliders, sound, impact effects, a
 - AI receiving, ground and jump setting, attacking, blocking, serving, earlier emergency dives, and a fallback setter when the normal setter takes the first touch.
 - Adjustable jump serves with a displayed parabola, hand-led toss motion, approach, foot plant, takeoff, timed contact, follow-through, and landing compression. AI servers use the same mechanics.
 - Independent horizontal and vertical serve-toss aiming with wider, faster adjustment, a live percentage meter, and both WASD and arrow-key support.
-- Arcade-fast acceleration and movement, shorter jump airtime, running strides tied to distance, timed air swings, ground receives, blocks, and full-body dives.
-- Ball gravity, serve and spike topspin, contact areas, a solid net, floor/out detection, three-touch and double-touch faults, and block touches that keep the ball live. Jump serves leave the hand faster and bend sharply down into the back court.
-- Role-based passing and larger set arcs, including airborne setter contacts, with actual contact timing determining whether a hit succeeds.
+- Near-instant acceleration, very high jumps, rapid plants and recoveries, running strides tied to distance, timed air swings, ground receives, blocks, and fast horizontal dives.
+- Exaggerated ball gravity, severe serve and spike topspin, generous action contact areas, a solid net, floor/out detection, three-touch and double-touch faults, and block touches that keep the ball live. Clean jump serves launch at extreme speed before dropping violently into the back court.
+- Role-based passing and oversized set arcs, including airborne setter contacts, with actual contact timing determining whether a hit succeeds.
 - A full serve/rally/point/match-result loop, rotating servers on side-out, score display, and win-by-two scoring.
-- Six soft, faceless 2D athletes use a 32-frame action atlas with connected anatomy, shaped limbs, fitted team uniforms, knee pads, hair, and court shoes. Separate run, spike, and jump-serve sequences cover approach strides, a deep plant, takeoff, a sideways airborne load, long contact, loose follow-through, and landing. Receive, jump-set, block, dive, and recovery poses complete the playable actions.
+- Six small, faceless 2D athletes use a 32-frame action atlas. The reduced on-court scale keeps their design visually quiet while separate run, spike, jump-serve, receive, jump-set, block, dive, and recovery sequences make the silhouettes readable in motion.
 - Skill-graded spike and serve contact based on swing-frame timing and palm alignment. Contact quality changes actual ball speed and every feedback layer; the match records your best speed.
-- Longer ball and player streaks, graded contact bursts, swing arcs, a brief impact hold, punch zoom, strong camera shake, velocity look-ahead, and fast camera tracking. Blocks reverse the spike with a sharp downward rebound.
+- Ball smears, full-court speed lines, player afterimages, pose squash and stretch, swing arcs, landing shock lines, expanding contact bursts, a bright impact wash, long hit-stop, punch zoom, strong camera shake, velocity look-ahead, and fast camera tracking. Blocks accelerate the incoming spike back down at the attacker.
 - Multiple contacts cut from a real CC0 indoor volleyball game supply distinct spikes, serves, blocks, passes, sets, floor hits, and landings with their natural gym reflections intact. Each action randomly selects a related take and plays one clean contact. A quiet real-gym room bed, selective shoe squeaks, slides, a restrained swing whoosh, and a wordless serve crowd keep the court alive without masking the ball. Pause and mute stop ongoing audio.
 
 This is an arcade baseline. Roles stay in fixed formations; it does not implement regulation six-player rotations, back-row restrictions, or every official fault. AI difficulty and jump/spike timing need human playtesting. Teammates use simple ball/role rules; there is no call-for-set input. Online play, touch controls, player switching, progression, and a varied character roster are outside this version.

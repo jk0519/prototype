@@ -4,7 +4,7 @@ extends RefCounted
 const Athlete = preload("res://scripts/athlete.gd")
 const AI = preload("res://scripts/ai_controller.gd")
 const BALL_RADIUS: float = 11.0
-const BALL_GRAVITY: float = 1500.0
+const BALL_GRAVITY: float = 1800.0
 const NET_X: float = 1000.0
 const NET_HEIGHT: float = 207.0
 const COURT_LEFT: float = 180.0
@@ -108,7 +108,7 @@ func refresh_ai_accuracy() -> void:
 	for i in range(6):
 		ai_error_x[i] = rng.randf_range(-118, 118)
 		ai_jump_error[i] = rng.randf_range(-0.12, 0.10)
-	ai_block_attempt = [rng.randf() < 0.63, rng.randf() < 0.63]
+	ai_block_attempt = [rng.randf() < 0.78, rng.randf() < 0.78]
 
 func attack_x(side: int) -> float:
 	return 830.0 if side == 0 else 1170.0
@@ -274,32 +274,32 @@ func strike_quality(p, action: String) -> float:
 func check_contacts() -> void:
 	if phase == "serve_toss":
 		var server = players[server_id]
-		if server.pos.y > 35 and server.swing_timer > 0 and within_contact(server, "serve", Vector2(42, 38)):
+		if server.pos.y > 35 and server.swing_timer > 0 and within_contact(server, "serve", Vector2(48, 44)):
 			serve(server)
 		return
 	# Block contacts take priority at the net. They do not consume a team touch.
 	for p in players:
 		if p.blocking and p.pos.y > 35 and p.team != last_team and last_action != "serve":
-			if within_contact(p, "block", Vector2(35, 54)):
+			if within_contact(p, "block", Vector2(110, 170)):
 				contact(p, "block")
 				return
 	for p in players:
 		if p.swing_timer > 0 and p.pos.y > 35:
-			if within_contact(p, "spike", Vector2(46, 42)):
+			if within_contact(p, "spike", Vector2(50, 46)):
 				contact(p, "spike")
 				return
 	if ball_velocity.y > 75:
 		return
 	for p in players:
 		if p.setting and p.team == last_team and touches == 1:
-			if within_contact(p, "set", Vector2(65, 48)):
+			if within_contact(p, "set", Vector2(72, 56)):
 				contact(p, "set")
 				return
 	for p in players:
 		if not p.receiving or p.pos.y > 30:
 			continue
 		var action = "dive" if p.dive_timer > 0 else "receive"
-		var radius = Vector2(84, 35) if action == "dive" else Vector2(66, 47)
+		var radius = Vector2(110, 44) if action == "dive" else Vector2(82, 55)
 		if within_contact(p, action, radius):
 			contact(p, action)
 			return
@@ -312,7 +312,7 @@ func serve(p) -> void:
 	last_player = p.id
 	last_action = "serve"
 	touches = 1
-	contact_lock = 0.24
+	contact_lock = 0.18
 	p.confirm_hit(ball - Vector2(p.facing * BALL_RADIUS, 0))
 	p.serve_pose = ""
 	ball = p.contact_center("serve") + Vector2(p.facing * BALL_RADIUS, 0)
@@ -320,9 +320,9 @@ func serve(p) -> void:
 	var height_power = clampf((ball.y - 205) / 135.0, 0, 1)
 	# A clean jump serve is fast and initially flat, then its strong topspin
 	# pulls the ball sharply into the back court.
-	var strike_speed = p.config.spike_speed * lerpf(0.92, 1.34, quality) * lerpf(0.96, 1.07, height_power)
-	var flight = maxf(0.36, absf(target - ball.x) / strike_speed)
-	ball_topspin = lerpf(720.0, 1320.0, quality)
+	var strike_speed = p.config.spike_speed * lerpf(1.00, 1.55, quality) * lerpf(0.96, 1.08, height_power)
+	var flight = maxf(0.30, absf(target - ball.x) / strike_speed)
+	ball_topspin = lerpf(1450.0, 2700.0, quality)
 	ball_velocity = arc_to(Vector2(target, 58), flight, ball_gravity())
 	if p.id == human_id:
 		best_hit_speed = maxf(best_hit_speed, ball_velocity.length())
@@ -344,16 +344,16 @@ func contact(p, action: String) -> void:
 		return
 	last_team = p.team
 	last_player = p.id
-	contact_lock = 0.13
+	contact_lock = 0.10
 	p.contact_flash = 0.18
 	p.swing_timer = 0
 	var quality = 0.62
 	match action:
 		"block":
-			ball_topspin = 120.0
+			ball_topspin = 500.0
 			var incoming = ball_velocity.length()
 			quality = clampf((incoming - 700.0) / 1500.0, 0.25, 1.0)
-			ball_velocity = Vector2(p.facing * maxf(950, absf(ball_velocity.x) * lerpf(0.84, 1.05, quality)), -lerpf(270, 480, quality))
+			ball_velocity = Vector2(p.facing * maxf(1200, absf(ball_velocity.x) * lerpf(1.02, 1.28, quality)), -lerpf(420, 760, quality))
 		"spike":
 			quality = strike_quality(p, "spike")
 			p.confirm_hit(ball - Vector2(p.facing * BALL_RADIUS, 0))
@@ -362,9 +362,9 @@ func contact(p, action: String) -> void:
 			if p.id == human_id:
 				depth = 605.0 - p.last_move * p.facing * 125.0
 			var target = NET_X + p.facing * depth
-			var strike_speed = p.config.spike_speed * lerpf(0.80, 1.26, quality)
-			var flight = maxf(0.28, absf(target - ball.x) / strike_speed)
-			ball_topspin = lerpf(280.0, 620.0, quality)
+			var strike_speed = p.config.spike_speed * lerpf(0.92, 1.50, quality)
+			var flight = maxf(0.20, absf(target - ball.x) / strike_speed)
+			ball_topspin = lerpf(850.0, 1900.0, quality)
 			ball_velocity = arc_to(Vector2(target, BALL_RADIUS), flight, ball_gravity())
 		"set":
 			set_ball(p.team)
@@ -401,7 +401,7 @@ func set_ball(side: int) -> void:
 	ball_topspin = 0
 	# High, readable sets give the wing time for a full approach and let the
 	# setter take the ball in the air without flattening the attack window.
-	var apex = maxf(510.0, ball.y + 155)
+	var apex = maxf(660.0, ball.y + 220)
 	var vy = sqrt(2 * BALL_GRAVITY * (apex - ball.y))
 	var flight = vy / BALL_GRAVITY + sqrt(2 * (apex - 325.0) / BALL_GRAVITY)
 	ball_velocity = Vector2((attack_x(side) - ball.x) / flight, vy)
