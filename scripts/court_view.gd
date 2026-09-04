@@ -175,16 +175,48 @@ func outlined_poly(points: PackedVector2Array, fill: Color, outline: Color = INK
 	edge.append(points[0])
 	draw_polyline(edge, outline, width, true)
 
-func outlined_line(points: Array, fill: Color, width: float) -> void:
-	var path = PackedVector2Array(points)
-	draw_polyline(path, INK, width + 4.0, true)
-	draw_polyline(path, fill, width, true)
-	for point in path:
-		draw_circle(point, width * 0.5 + 2.0, INK)
-		draw_circle(point, width * 0.5, fill)
+func tapered_segment(a: Vector2, b: Vector2, a_width: float, b_width: float, fill: Color, outline_width: float = 2.1) -> void:
+	var axis = b - a
+	if axis.length_squared() < 0.01:
+		return
+	var across = axis.normalized().orthogonal()
+	outlined_poly(PackedVector2Array([
+		a + across * a_width,
+		b + across * b_width,
+		b - across * b_width,
+		a - across * a_width
+	]), fill, INK, outline_width)
 
-func limb(a: Vector2, b: Vector2, c: Vector2, color: Color, width: float) -> void:
-	outlined_line([a, b, c], color, width)
+func oriented_ellipse(center: Vector2, axis: Vector2, along: float, across: float, fill: Color, outline_width: float = 2.0) -> void:
+	var direction = axis.normalized() if axis.length_squared() > 0.01 else Vector2.UP
+	var side = direction.orthogonal()
+	var points = PackedVector2Array()
+	for i in range(24):
+		var angle = i * TAU / 24.0
+		points.append(center + direction * cos(angle) * along + side * sin(angle) * across)
+	outlined_poly(points, fill, INK, outline_width)
+
+func shoulder_anchor(center: Vector2, toward: Vector2, across: Vector2, width: float) -> Vector2:
+	var side = signf((toward - center).dot(across))
+	if side == 0: side = 1
+	return center + across * width * side
+
+func draw_arm(root: Vector2, elbow: Vector2, hand: Vector2, skin: Color, jersey: Color, behind: bool) -> void:
+	var shade = skin.darkened(0.10) if behind else skin
+	var sleeve_end = root.lerp(elbow, 0.25)
+	tapered_segment(root, sleeve_end, 7.2, 6.3, jersey.darkened(0.08) if behind else jersey, 2.0)
+	tapered_segment(sleeve_end, elbow, 5.6, 4.7, shade, 2.0)
+	tapered_segment(elbow, hand, 4.5, 3.4, shade, 2.0)
+	oriented_ellipse(hand, hand - elbow, 5.2, 3.7, shade, 1.8)
+
+func draw_leg(root: Vector2, knee: Vector2, foot: Vector2, skin: Color, team_color: Color, behind: bool) -> void:
+	var shade = skin.darkened(0.10) if behind else skin
+	tapered_segment(root, knee, 7.0, 5.8, shade, 2.2)
+	tapered_segment(knee, foot, 5.1, 3.8, shade, 2.1)
+	var lower_axis = foot - knee
+	# Slim dark knee pads hide the segment seam and make the silhouette read as
+	# volleyball gear instead of a ball-and-socket toy joint.
+	oriented_ellipse(knee + lower_axis.normalized() * 1.5, lower_axis, 6.1, 6.4, Color("172434") if behind else Color("1d3042"), 1.8)
 
 func torso_shape(shoulder: Vector2, hip: Vector2, upper: float, lower: float) -> PackedVector2Array:
 	var axis = (hip - shoulder).normalized()
@@ -210,46 +242,43 @@ func draw_shoe(foot: Vector2, direction: float, accent: Color, back: bool) -> vo
 	outlined_poly(shoe, shade, INK, 2.5)
 	draw_line(foot + Vector2(d * 2, -2), foot + Vector2(d * 9, 0), accent, 2, true)
 
-func draw_head(head: Vector2, facing: float, skin: Color, hair: Color, style: int) -> void:
-	# Larger anime proportions and a sharp hair silhouette keep the player
-	# readable while the camera follows a fast ball.
-	draw_circle(head, 16.5, INK)
-	draw_circle(head, 13.8, skin)
-	var spikes: PackedVector2Array
-	if style == 0:
-		spikes = PackedVector2Array([
-			head + Vector2(-16, -4), head + Vector2(-15, -14),
-			head + Vector2(-9, -19), head + Vector2(-5, -16),
-			head + Vector2(-1, -23), head + Vector2(3, -17),
-			head + Vector2(9, -21), head + Vector2(15, -13),
-			head + Vector2(15, -3), head + Vector2(7, -8),
-			head + Vector2(2, -3), head + Vector2(-3, -9), head + Vector2(-9, -2)
-		])
-	elif style == 1:
-		spikes = PackedVector2Array([
-			head + Vector2(-16, -3), head + Vector2(-15, -15),
-			head + Vector2(-8, -21), head + Vector2(-1, -18),
-			head + Vector2(5, -22), head + Vector2(13, -17),
-			head + Vector2(16, -8), head + Vector2(10, -3),
-			head + Vector2(5, -10), head + Vector2(0, -3), head + Vector2(-6, -10), head + Vector2(-10, -2)
-		])
-	else:
-		spikes = PackedVector2Array([
-			head + Vector2(-17, -5), head + Vector2(-12, -18),
-			head + Vector2(-3, -22), head + Vector2(7, -20),
-			head + Vector2(16, -12), head + Vector2(17, -3),
-			head + Vector2(8, -6), head + Vector2(3, -1),
-			head + Vector2(-2, -8), head + Vector2(-8, -1)
-		])
-	# Mirror the haircut so its leading fringe follows the player.
+func head_point(head: Vector2, up: Vector2, side: Vector2, x: float, y: float) -> Vector2:
+	return head + side * x + up * y
+
+func draw_head(head: Vector2, shoulder: Vector2, facing: float, skin: Color, hair: Color, style: int) -> void:
+	var up = (head - shoulder).normalized()
+	if up.length_squared() < 0.01: up = Vector2.UP
+	var side = Vector2(-up.y, up.x)
+	# A smaller oval head and restrained hair keep the player athletic rather
+	# than chibi. The oval follows the neck so torso flex carries into the head.
+	oriented_ellipse(head, up, 14.5, 11.2, skin, 2.1)
+	var lift = float(style) * 0.8
+	var hair_points = PackedVector2Array([
+		head_point(head, up, side, -11.2, 2.0),
+		head_point(head, up, side, -10.5, 9.2),
+		head_point(head, up, side, -6.5, 13.7 + lift),
+		head_point(head, up, side, -1.5, 15.7),
+		head_point(head, up, side, 3.8, 14.8 + lift),
+		head_point(head, up, side, 9.4, 10.5),
+		head_point(head, up, side, 11.2, 4.0),
+		head_point(head, up, side, 7.0, 6.5),
+		head_point(head, up, side, 3.4, 5.2 + lift),
+		head_point(head, up, side, 0.2, 8.2),
+		head_point(head, up, side, -3.5, 5.1),
+		head_point(head, up, side, -7.4, 6.7)
+	])
 	if facing < 0:
-		for i in range(spikes.size()): spikes[i].x = head.x - (spikes[i].x - head.x)
-	outlined_poly(spikes, hair, INK, 2.5)
-	var eye = head + Vector2(facing * 6, 0)
-	draw_line(eye + Vector2(-facing * 2, -2), eye + Vector2(facing * 3, -1), INK, 2.2, true)
-	draw_circle(eye + Vector2(facing * 2, 0), 1.6, Color("eff8f4"))
-	draw_circle(eye + Vector2(facing * 2.5, 0), 0.9, INK)
-	draw_line(head + Vector2(facing * 8, 4), head + Vector2(facing * 11, 3), skin.darkened(0.38), 1.5, true)
+		for i in range(hair_points.size()):
+			var offset = hair_points[i] - head
+			hair_points[i] = head - side * offset.dot(side) + up * offset.dot(up)
+	outlined_poly(hair_points, hair, INK, 2.0)
+	# One calm eye and a level mouth remain readable without giving every player
+	# a permanent angry expression.
+	var eye = head + side * facing * 5.2 + up * 0.4
+	draw_circle(eye, 1.25, INK)
+	draw_circle(eye + side * facing * 0.35 + up * 0.35, 0.35, CREAM)
+	var mouth = head + side * facing * 6.0 - up * 5.2
+	draw_line(mouth - side * 1.4, mouth + side * 1.4, skin.darkened(0.42), 1.2, true)
 
 func draw_motion_streaks(p, origin: Vector2, team_color: Color) -> void:
 	var speed = absf(p.velocity.x)
@@ -285,19 +314,23 @@ func draw_player(p) -> void:
 	var shoulder: Vector2 = joints.shoulder
 	var hip: Vector2 = joints.hip
 	var head: Vector2 = joints.head
+	var body_axis = (hip - shoulder).normalized()
+	var body_across = Vector2(-body_axis.y, body_axis.x)
 	draw_motion_streaks(p, origin, team_color)
-	# Back limbs first, then the uniform mass, then the leading limbs. Dark
-	# outlines keep each pose legible against court and crowd at any zoom.
-	limb(hip, joints.back_knee, joints.back_foot, skin.darkened(0.13), 9)
-	limb(hip, joints.front_knee, joints.front_foot, skin, 9)
+	# Limbs begin at separate shoulder and hip anchors. Tapered segments and
+	# fitted pads keep the body connected without visible ball joints.
+	var back_hip = shoulder_anchor(hip, joints.back_knee, body_across, 6.4)
+	var front_hip = shoulder_anchor(hip, joints.front_knee, body_across, 6.4)
+	draw_leg(back_hip, joints.back_knee, joints.back_foot, skin, team_color, true)
+	draw_leg(front_hip, joints.front_knee, joints.front_foot, skin, team_color, false)
 	var shoe_direction = signf(p.velocity.x) if absf(p.velocity.x) > 30 else f
 	draw_shoe(joints.back_foot, shoe_direction, team_color, true)
 	draw_shoe(joints.front_foot, shoe_direction, team_color, false)
-	limb(shoulder, joints.other_elbow, joints.other_hand, skin.darkened(0.10), 8)
-	# Fitted jersey and angular shorts replace the previous rectangular body.
-	outlined_poly(torso_shape(shoulder, hip, 17.5, 12.5), team_color, INK, 3.5)
-	var body_axis = (hip - shoulder).normalized()
-	var body_across = Vector2(-body_axis.y, body_axis.x)
+	var back_shoulder = shoulder_anchor(shoulder, joints.other_elbow, body_across, 15.0)
+	draw_arm(back_shoulder, joints.other_elbow, joints.other_hand, skin, team_color, true)
+	# A longer shoulder line and narrow waist match the lean volleyball physique
+	# in the reference while preserving every gameplay contact joint.
+	outlined_poly(torso_shape(shoulder, hip, 20.5, 12.0), team_color, INK, 2.5)
 	draw_line(shoulder - body_across * 13, shoulder + body_axis * 10 - body_across * 10, trim, 4, true)
 	draw_line(shoulder + body_across * 13, shoulder + body_axis * 10 + body_across * 10, trim, 4, true)
 	var shorts = PackedVector2Array([
@@ -307,13 +340,17 @@ func draw_player(p) -> void:
 		hip + body_axis * 5,
 		hip - body_across * 10 + body_axis * 11
 	])
-	outlined_poly(shorts, Color("12283a"), INK, 3)
-	draw_line(shoulder + body_axis * 6, hip - body_axis * 5, Color(team_dark, 0.75), 4, true)
+	outlined_poly(shorts, Color("12283a"), INK, 2.4)
+	draw_line(shoulder + body_axis * 7, hip - body_axis * 5, Color(team_dark, 0.65), 3, true)
+	var neck_base = shoulder - body_axis * 2.5
+	var neck_top = head + body_axis * 10.5
+	tapered_segment(neck_base, neck_top, 4.8, 4.1, skin.darkened(0.03), 1.8)
 	# Number follows the torso rather than floating over a line segment.
 	var number_at = shoulder.lerp(hip, 0.53) + Vector2(0, 5)
 	caption(number_at, str(p.number), 14, trim, true)
-	draw_head(head, f, skin, hair, p.id % 3)
-	limb(shoulder, joints.elbow, joints.hand, skin, 8.5)
+	draw_head(head, shoulder, f, skin, hair, p.id % 3)
+	var front_shoulder = shoulder_anchor(shoulder, joints.elbow, body_across, 15.5)
+	draw_arm(front_shoulder, joints.elbow, joints.hand, skin, team_color, false)
 	if p.swing_connected and p.swing_elapsed >= 0.12 and p.swing_elapsed < 0.23:
 		var alpha = (0.23 - p.swing_elapsed) / 0.11
 		var burst = joints.hand

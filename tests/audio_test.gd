@@ -16,15 +16,19 @@ func run() -> void:
 	sound.set_active(true)
 	game.phase = "serve_aim"
 	sound.update(game, 0.1)
-	expect(sound.crowd.playing, "Aiming starts the crowd swell")
+	expect(sound.crowd.playing and sound.court_room.playing, "Aiming starts the crowd swell and real gym room")
 	sound.play({"kind": "toss", "position": game.ball, "player": 0})
 	expect(sound.cursor == 0, "A toss does not produce a hit sound")
 	game.phase = "rally"
 	sound.play({"kind": "serve", "position": game.ball, "player": 0})
-	expect(sound.cursor == 2 and sound.reaction.playing and not sound.crowd.playing, "Real serve contact triggers a layered court hit and releases the crowd")
+	expect(sound.cursor == 1 and sound.reaction.playing and not sound.crowd.playing, "Real serve contact uses one clean court hit and releases the crowd")
 	var before_swing = sound.cursor
 	sound.play({"kind": "swing", "position": game.ball, "player": 0})
 	expect(sound.cursor == before_swing + 1, "An attack swing has an air cue before contact")
+	for contact in ["spike", "block", "receive", "set", "floor"]:
+		var before_contact = sound.cursor
+		sound.play({"kind": contact, "position": game.ball, "player": 0, "quality": 0.8})
+		expect(sound.cursor == before_contact + 1, "%s uses one clean real-court contact" % contact)
 	sound.set_active(false)
 	expect(not sound.reaction.playing and not sound.voices[0].playing, "Pause stops court and crowd voices")
 	sound.set_active(true)

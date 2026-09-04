@@ -294,7 +294,7 @@ func add_menu_button(label: String, action: Callable, primary: bool = false) -> 
 func show_title() -> void:
 	mode = "title"
 	clear_menu()
-	add_label("COURT 01  /  CONTACT BUILD", 11, Color("91b7c9"))
+	add_label("COURT 01  /  ATHLETE BUILD", 11, Color("91b7c9"))
 	add_label("SIDEOUT", 50)
 	add_label("Toss. Approach. Jump. Connect.", 17, Color("b6cbd3"))
 	add_label("You play wing spiker. Your setter and blocker play\nautomatically. Beat the opposing trio to 15, win by 2.", 13, Color("8faaba"))

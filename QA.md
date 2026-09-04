@@ -1,6 +1,6 @@
 # Body mechanics and contact update validation
 
-Engine: Godot **4.7.2.stable.official.ed1daf0bf**. Build: **SIDEOUT 0.5.0**. Development host: Apple Silicon Mac.
+Engine: Godot **4.7.2.stable.official.ed1daf0bf**. Build: **SIDEOUT 0.6.0**. Development host: Apple Silicon Mac.
 
 ## Passed
 
@@ -13,9 +13,9 @@ Engine: Godot **4.7.2.stable.official.ed1daf0bf**. Build: **SIDEOUT 0.5.0**. Dev
 - Centered contact in the torso-snap window must earn a perfect grade and launch above 2,200 px/s. A 1,900 px/s incoming attack must produce a forceful high-grade block rebound. Human serve/spike speed is stored as the match best.
 - Three seeded AI matches finish with receives, sets, spikes, blocks, free balls, dives, net contacts, and multi-contact rallies. Results: 12–15 (38-contact longest rally), 15–7 (16), and 15–13 (24).
 - The real main scene passes keyboard integration: title, six players, vertical toss aim and release, approach/jump/air-swing serve, reported contact grade and speed, movement, graded impact hold/burst, Escape pause/resume with frozen match time, human receive followed by AI set, result screen, and rematch.
-- The audio lifecycle suite confirms the aim starts the crowd swell, toss is silent, a swing triggers its air cue, serve contact triggers its two-layer ball hit and crowd release, and pause/mute stop sustained audio. All prepared court samples load as recorded WAV files.
+- The audio lifecycle suite confirms the aim starts the crowd swell and real-gym room, toss is silent, a swing triggers its air cue, serve contact triggers one clean volleyball hit and the crowd release, and pause/mute stop sustained audio. All prepared court samples load as recorded WAV files.
 - Native 1280x800 captures cover title, toss aim and vertical meter, throwing windup, foot plant, jump, sideways torso contact, follow-through, block impact, horizontal dive, and both ends of the scrolling settings panel. The high toss remains framed, control prompts and contact grades are readable, hands meet the ball at strike and block contact, and all controls and both volume sliders remain accessible.
-- The new player renderer was checked at ready, aim, plant, jump, contact, follow-through, and dive poses. Each athlete has an outlined body, fitted team uniform, face, distinct hair/palette, articulated hands and legs, and layered court shoes. Fast movement and hits show directional streaks, swing arcs, and contact bursts.
+- The player renderer was checked at ready, aim, plant, jump, contact, follow-through, block, and dive poses. Each athlete now has tapered limbs without circular toy joints, separate limb anchors, sleeves, knee pads, a connected neck, a smaller oval head, and a neutral face. Fast movement and hits still show directional streaks, swing arcs, and contact bursts.
 - macOS universal export succeeds, contains arm64 and x86_64 binaries, and passes the strict Apple code-signature check.
 - The exported app launches silently in an automated smoke run and reaches the gameplay scene.
 

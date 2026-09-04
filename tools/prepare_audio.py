@@ -16,7 +16,7 @@ CACHE.mkdir(parents=True, exist_ok=True)
 OUT.mkdir(parents=True, exist_ok=True)
 RATE = 48000
 SOURCES = {
-    'spike': 'https://cdn.freesound.org/previews/813/813420_17552599-hq.mp3',
+    'game': 'https://cdn.freesound.org/previews/324/324402_1512122-hq.mp3',
     'whoosh': 'https://cdn.freesound.org/previews/719/719637_15601358-hq.mp3',
     'crowd_ooh': 'https://cdn.freesound.org/previews/324/324890_2104797-hq.mp3',
     'crowd_ah': 'https://cdn.freesound.org/previews/324/324896_2104797-hq.mp3',
@@ -63,17 +63,38 @@ def finish(name, x, peak=.8, drive=1.35, attack=.006, fade=.018):
     wavfile.write(OUT / (name + '.wav'), RATE, np.int16(x * 32767))
 
 
-# One isolated real volleyball spike at 0.665 s supplies a consistent family of
-# ball contacts. Different dry filtering and runtime pitch layers distinguish
-# palm strike, block, pass, set, floor, and landing without electronic tones.
-x = DATA['spike'][int(.625 * RATE):int(1.22 * RATE)]
-finish('spike_hit', band(x, 55, 11500) + low(x, 950) * .42, .88, 1.85, .004)
-short = x[:int(.34 * RATE)]
-finish('block_hit', low(short, 4200) + high(short, 750) * .24, .88, 1.85, .004, .012)
-finish('receive_hit', low(x[:int(.31 * RATE)], 3600), .72, 1.85, .004, .014)
-finish('set_hit', low(x[:int(.22 * RATE)], 2600), .62, 1.85, .004, .012)
-finish('floor_hit', low(x[:int(.38 * RATE)], 1450), .82, 1.85, .004)
-finish('land', low(x[:int(.315 * RATE)], 720), .50, 1.35, .006, .025)
+def natural_contact(name, center, duration=.38, peak=.82):
+    """Keep the real gym transient and room tail with only cleanup and gain."""
+    pre = .045
+    start = int((center - pre) * RATE)
+    x = DATA['game'][start:start + int(duration * RATE)].copy()
+    x = high(x - x.mean(), 70)
+    x *= peak / max(np.max(np.abs(x)), 1e-9)
+    a, f = int(.008 * RATE), int(.055 * RATE)
+    x[:a] *= np.linspace(0, 1, a)
+    x[-f:] *= np.linspace(1, 0, f)
+    wavfile.write(OUT / (name + '.wav'), RATE, np.int16(np.clip(x, -.98, .98) * 32767))
+
+
+# Separate contacts from one CC0 recording of a real indoor volleyball game.
+# The short clips retain the actual ball skin, hand slap, gym reflection and
+# nearby court texture. They are not synthesized or layered into a fake thud.
+for name, center, duration, peak in [
+    ('spike_hit', 251.004, .43, .92),
+    ('spike_hit_1', 251.615, .43, .90),
+    ('spike_hit_2', 254.983, .43, .92),
+    ('serve_hit', 63.188, .44, .90),
+    ('serve_hit_1', 71.822, .44, .92),
+    ('block_hit', 84.288, .32, .82),
+    ('block_hit_1', 85.072, .32, .82),
+    ('receive_hit', 207.854, .30, .66),
+    ('receive_hit_1', 208.500, .30, .64),
+    ('set_hit', 209.189, .24, .52),
+    ('set_hit_1', 210.629, .24, .50),
+    ('floor_hit', 175.627, .38, .78),
+    ('land', 146.096, .30, .48),
+]:
+    natural_contact(name, center, duration, peak)
 finish('swing_whoosh', band(DATA['whoosh'][:int(.25 * RATE)], 180, 12500), .72, 1.3, .008, .025)
 
 shoe = DATA['shoes']
@@ -90,6 +111,16 @@ crowd = crowd[:-n]
 crowd *= .65 / max(np.max(np.abs(crowd)), 1e-9)
 wavfile.write(OUT / 'crowd_swell.wav', RATE, np.int16(crowd * 32767))
 finish('crowd_release', band(DATA['crowd_ah'][int(6.65 * RATE):int(8.60 * RATE)], 150, 12000), .65, 1.0, .006, .25)
+
+# A quiet real-gym bed restores the room around isolated contacts. Runtime gain
+# remains low so positioning, timing and the ball stay clear.
+ambience = band(DATA['game'][int(40.2 * RATE):int(43.8 * RATE)], 90, 10500)
+n = int(.45 * RATE)
+blend = np.linspace(0, 1, n)
+ambience[:n] = ambience[-n:] * (1 - blend) + ambience[:n] * blend
+ambience = ambience[:-n]
+ambience *= .52 / max(np.max(np.abs(ambience)), 1e-9)
+wavfile.write(OUT / 'court_ambience.wav', RATE, np.int16(ambience * 32767))
 
 for obsolete in ['hit_0', 'hit_1', 'hit_2', 'touch', 'floor', 'step_0', 'step_1']:
     (OUT / (obsolete + '.wav')).unlink(missing_ok=True)
