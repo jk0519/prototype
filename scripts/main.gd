@@ -161,10 +161,12 @@ func update_camera(dt: float) -> void:
 	var player_x = game.players[game.human_id].pos.x
 	var lo = minf(player_x, minf(game.ball.x, 900)) - 190
 	var hi = maxf(player_x, maxf(game.ball.x, 1100)) + 190
-	var span = clampf(hi - lo, 1510, 2550)
-	var top = maxf(540, game.ball.y + 100)
+	# Keep players large enough to read while the camera pans with the rally.
+	# High balls and cross-court chases still pull the view back automatically.
+	var span = clampf(hi - lo, 1120, 2380)
+	var top = maxf(500, game.ball.y + 100)
 	if game.phase in ["serve_aim", "serve_windup", "serve_toss"]: top = maxf(top, game.toss_height + 110)
-	var target_zoom = minf(viewport_size.x / span, viewport_size.y * 0.57 / top)
+	var target_zoom = minf(viewport_size.x / span, viewport_size.y * 0.70 / top)
 	var target_x = clampf((lo + hi) * 0.5, 400, 1560)
 	if mode == "playing" and game.phase == "rally":
 		target_x += clampf(game.ball_velocity.x * 0.05, -95, 95)

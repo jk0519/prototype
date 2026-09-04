@@ -1,4 +1,4 @@
-# SIDEOUT — faceless athletes and topspin update
+# SIDEOUT — continuous athlete animation update
 
 A Mac-first, 2D volleyball prototype inspired by the basic play of The Spike: six athletes, one human wing spiker, and five AI players. Built in **Godot 4.7.2**, with original faceless anime-style athletes, a reactive camera, and recorded court audio.
 
@@ -40,12 +40,12 @@ Keyboard bindings, separate court/crowd volume sliders, sound, impact effects, a
 - Ball gravity, serve and spike topspin, contact areas, a solid net, floor/out detection, three-touch and double-touch faults, and block touches that keep the ball live. Jump serves leave the hand faster and bend sharply down into the back court.
 - Role-based passing and larger set arcs, including airborne setter contacts, with actual contact timing determining whether a hit succeeds.
 - A full serve/rally/point/match-result loop, rotating servers on side-out, score display, and win-by-two scoring.
-- Six lean, faceless athletes rendered from original illustrated pose art, with blank faces, long limbs, fitted team uniforms, knee pads, hands, hair, and court shoes. Eight readable silhouettes cover ready/receive, crouch, run, jump, windup, spike, block/jump-set, and dive actions; small motion transforms and effects keep them alive between contacts.
+- Six lean, faceless athletes drawn from a continuously animated joint rig, with blank faces, connected limbs, fitted team uniforms, knee pads, hands, hair, and court shoes. Movement flows through approach strides, a deep plant, takeoff, airborne load, torso rotation, arm whip, contact, follow-through, landing, receive recoil, jump sets, blocks, full dives, and hand-planted recovery.
 - Skill-graded spike and serve contact based on swing-frame timing and palm alignment. Contact quality changes actual ball speed and every feedback layer; the match records your best speed.
 - Longer ball and player streaks, graded contact bursts, swing arcs, a brief impact hold, punch zoom, strong camera shake, velocity look-ahead, and fast camera tracking. Blocks reverse the spike with a sharp downward rebound.
 - Multiple contacts cut from a real CC0 indoor volleyball game supply distinct spikes, serves, blocks, passes, sets, floor hits, and landings with their natural gym reflections intact. Each action randomly selects a related take and plays one clean contact. A quiet real-gym room bed, selective shoe squeaks, slides, a restrained swing whoosh, and a wordless serve crowd keep the court alive without masking the ball. Pause and mute stop ongoing audio.
 
-This is an arcade baseline. Roles stay in fixed formations; it does not implement regulation six-player rotations, back-row restrictions, or every official fault. AI difficulty and jump/spike timing need human playtesting. Teammates use simple ball/role rules; there is no call-for-set input. Online play, touch controls, player switching, progression, and authored sprite sheets are outside this version.
+This is an arcade baseline. Roles stay in fixed formations; it does not implement regulation six-player rotations, back-row restrictions, or every official fault. AI difficulty and jump/spike timing need human playtesting. Teammates use simple ball/role rules; there is no call-for-set input. Online play, touch controls, player switching, progression, and authored frame-by-frame character art are outside this version.
 
 ## Open the project
 
@@ -53,7 +53,7 @@ This is an arcade baseline. Roles stay in fixed formations; it does not implemen
 2. Import `project.godot` into Godot, then press **F6** on the main scene or **F5** to run the project.
 3. To export a Mac app, install the matching export templates through Godot's **Manage Export Templates** dialog, then use the **macOS** export preset.
 
-The repository contains the complete editable project. It has no runtime package-manager dependencies or external art downloads. Godot's generated `.godot` cache and application builds are excluded from version control. The selected athlete concept and the prepared transparent pose textures are stored under `assets/art`; `tools/prepare_athlete_sprites.py` reproduces the crops and the orange-team palette with Pillow and NumPy.
+The repository contains the complete editable project. It has no runtime package-manager dependencies or external art downloads. Godot's generated `.godot` cache and application builds are excluded from version control. The selected athlete concept and prepared pose studies are stored under `assets/art` as visual references; the shipped game draws and animates its athletes directly from the shared gameplay skeleton.
 
 ## Development and verification
 
@@ -79,4 +79,4 @@ Godot and its bundled third-party dependencies retain their respective licenses.
 
 The bundled foley and wordless crowd recordings are CC0. See [audio credits](assets/audio/CREDITS.md) for creators, source links, and edits. `tools/prepare_audio.py` reproduces the prepared samples using Python with numpy/scipy and ffmpeg. No assets were extracted from The Spike. Running or building the game needs no audio downloads or Python packages.
 
-For silent visual checks, launch with `-- --mute`. `tests/visual_capture.gd` captures native screenshots of the toss, plant, jump, contact, follow-through, dive, jump-set, block, and settings; use `--audio-driver Dummy` and `-- --visual-output=/absolute/output/folder --mute`.
+For silent visual checks, launch with `-- --mute`. `tests/visual_capture.gd` captures native screenshots of the toss, plant, jump, contact, follow-through, dive, jump-set, block, and settings; use `--audio-driver Dummy` and `-- --visual-output=/absolute/output/folder --mute`. Godot Movie Maker mode can record a fixed-frame gameplay pass for transition review.

@@ -9,7 +9,7 @@ func _initialize() -> void:
 	for seed_value in [7, 21, 83]:
 		check_match(seed_value)
 	if failures.is_empty():
-		print("PASS: simulation, input, scoring, collisions and complete 3v3 matches")
+		print("PASS: simulation, input, continuous action animation, scoring, collisions and complete 3v3 matches")
 		quit(0)
 	else:
 		for failure in failures:
@@ -88,6 +88,12 @@ func check_human_control() -> void:
 	athlete.reset(400)
 	athlete.step(1.0 / 120.0, {"move": 1.0, "dive": true})
 	expect(athlete.dive_timer > 0.35 and athlete.velocity.x >= athlete.config.dive_speed, "Dive input launches a full-body floor save")
+	var dive_launch = athlete.skeleton()
+	for i in range(16): athlete.step(1.0 / 120.0, {})
+	var dive_extension = athlete.skeleton()
+	expect(dive_extension.hand.distance_to(dive_launch.hand) > 18, "Dive extends through intermediate airborne motion")
+	for i in range(35): athlete.step(1.0 / 120.0, {})
+	expect(athlete.dive_timer == 0 and athlete.dive_recovery > 0, "Dive transitions through a hand-planted recovery")
 	var pose_player = MatchModel.new().players[0]
 	pose_player.serve_pose = "windup"
 	pose_player.serve_pose_time = 0.22
@@ -100,6 +106,18 @@ func check_human_control() -> void:
 	var strike_pose = pose_player.skeleton()
 	expect(coil_pose.shoulder.x - coil_pose.hip.x < -25, "Spike begins with a backward whole-body coil")
 	expect(strike_pose.shoulder.x - strike_pose.hip.x > 34 and strike_pose.head.x - strike_pose.hip.x > 42, "Spike snaps the torso and head sideways through contact")
+	pose_player.swing_elapsed = 0.05
+	var early_snap = pose_player.skeleton()
+	pose_player.swing_elapsed = 0.08
+	var mid_snap = pose_player.skeleton()
+	pose_player.swing_elapsed = 0.105
+	var late_snap = pose_player.skeleton()
+	expect(early_snap.hand.x < mid_snap.hand.x and mid_snap.hand.x < late_snap.hand.x, "Spike arm whips through multiple ordered in-between frames")
+	pose_player.reset(500)
+	var set_start = pose_player.skeleton()
+	for i in range(22): pose_player.step(1.0 / 120.0, {"set": true})
+	var set_ready = pose_player.skeleton()
+	expect(set_ready.hand.y > set_start.hand.y + 50 and set_ready.other_hand.y > set_start.other_hand.y + 50, "Set raises both hands through a timed preparation")
 
 func check_rules() -> void:
 	var game = MatchModel.new()

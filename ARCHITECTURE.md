@@ -6,10 +6,10 @@ The game separates keyboard/UI input, player actions, match rules, and drawing. 
 | --- | --- |
 | `scenes/main.tscn` / `scripts/main.gd` | Scene setup, keyboard bindings, camera, menus, preferences, and connecting simulation events to feedback |
 | `scripts/match_model.gd` | Ball state, serve/rally/point/result phases, legal contacts, scoring, role-based ball trajectories, and match statistics |
-| `scripts/athlete.gd` | A single player's movement, plant/takeoff/swing/follow-through/landing state, collision skeleton, and contact positions |
+| `scripts/athlete.gd` | A single player's movement, continuous action timelines, collision skeleton, and contact positions |
 | `scripts/player_config.gd` | Shared configurable movement, jump, reach, and spike attributes, with small role variations |
 | `scripts/ai_controller.gd` | Ball prediction and role rules producing the same action dictionaries as human input |
-| `scripts/court_view.gd` | Arena, illustrated faceless athlete poses, ball/player streaks, and contact effects |
+| `scripts/court_view.gd` | Arena, smoothed faceless athlete rig, ball/player streaks, camera-readable silhouettes, and contact effects |
 | `scripts/hud.gd` | Score, match prompts, role marker, and control hints |
 | `scripts/audio_feedback.gd` | Recorded CC0 samples, positional court voices, footfall variation, serve crowd envelope, volume and mute lifecycle |
 
@@ -34,9 +34,9 @@ Serve, pass, set, and spike velocities are calculated arcs with arcade assistanc
 
 Serve phases are `serve_ready → serve_aim → serve_windup → serve_toss → rally`. Hold X to aim, adjust the toss using A/D and W/S, release X for the throwing animation, approach, then use separate jump and swing inputs. The preview and released ball use the same launch velocity and gravity. A grounded server plants behind the baseline; an airborne server can travel over it. Missing the toss awards the point.
 
-The athlete collision skeleton supplies the striking-hand contact center and smoothly moves through the serve and spike. Court rendering maps that state to eight finished pose illustrations: receive, crouch, run, jump, windup, spike, block/jump-set, and dive. Contact captures the palm pose at the ball and cannot cause a second contact. Run stride/footfall events track distance travelled; jump, cut, slide, and landing events drive their respective recorded sounds. Cosmetic motion events never reroll AI errors or increment ball-contact metrics.
+The athlete collision skeleton supplies the striking-hand contact center and the target pose for every rendered joint. Each action has anticipation, contact, follow-through, and recovery phases. Court rendering follows those targets with damped visual tracks, using a faster response only during the arm snap. This creates intermediate frames without disconnecting contact from the simulation. Contact captures the palm at the ball and cannot cause a second contact. Run stride/footfall events track distance travelled; jump, cut, slide, and landing events drive their respective recorded sounds. Cosmetic motion events never reroll AI errors or increment ball-contact metrics.
 
-Player art is original and faceless. Long limbs, fitted uniforms, knee pads, hair, hands, and court shoes form clean silhouettes without eyes or mouths. North and South use separate prepared palettes. `assets/art/athlete-style-guide.png` is the selected concept sheet; the transparent runtime poses live in `assets/art/athletes`, and `tools/prepare_athlete_sprites.py` reproduces them. The collision skeleton stays independent from input ownership, so every action remains available to any controlled role.
+Player art is original and faceless. Connected limbs, fitted uniforms, knee pads, hair, hands, and court shoes form clean silhouettes without eyes or mouths. North and South use separate palettes. `assets/art/athlete-style-guide.png` and `assets/art/athletes` remain pose studies; they are excluded from exports because the runtime athlete is drawn from the articulated skeleton. The collision skeleton stays independent from input ownership, so every action remains available to any controlled role.
 
 Fast attacks add long ball streaks, player motion lines, swing arcs, radial contact bursts, camera velocity look-ahead, punch zoom, and a brief impact hold. Contact quality drives ball speed, audio gain and pitch, flash size, ray count, shake, zoom, and hold duration. A transient grade and km/h readout explain the result, while the HUD retains the human player's best serve or spike speed for the match. Blocks preserve most incoming horizontal speed while reversing it and driving the ball down. Turning off impact effects also turns off the hold, shake, and punch zoom. Match rules and ball physics remain deterministic.
 
