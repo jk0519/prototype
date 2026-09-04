@@ -54,12 +54,12 @@ func _draw() -> void:
 		var hint = "Get into position for the next ball"
 		if own_serve:
 			match game.phase:
-				"serve_ready": hint = "Hold %s to aim your toss" % key_names.get("block", "X")
+				"serve_ready": hint = "%s / %s to move  ·  hold %s to charge the toss" % [key_names.get("left", "A"), key_names.get("right", "D"), key_names.get("block", "X")]
 				"serve_aim":
-					prompt = "%s / %s  HORIZONTAL    %s / %s  VERTICAL" % [key_names.get("left", "A"), key_names.get("right", "D"), key_names.get("toss_raise", "W"), key_names.get("toss_lower", "S")]
+					prompt = "%s / %s  MOVE    %s / %s  TOSS HEIGHT" % [key_names.get("left", "A"), key_names.get("right", "D"), key_names.get("toss_raise", "W"), key_names.get("toss_lower", "S")]
 					var vertical = roundi(inverse_lerp(game.TOSS_MIN_HEIGHT, game.TOSS_MAX_HEIGHT, game.toss_height) * 100)
 					var forward = roundi(inverse_lerp(game.TOSS_MIN_FORWARD, game.TOSS_MAX_FORWARD, game.toss_forward) * 100)
-					hint = "VERTICAL %d%%  ·  FORWARD %d%%  ·  RELEASE %s" % [vertical, forward, key_names.get("block", "X")]
+					hint = "HEIGHT %d%%  ·  CHARGE %d%%  ·  RELEASE %s" % [vertical, forward, key_names.get("block", "X")]
 				"serve_windup": hint = "Get ready to approach"
 				"serve_toss": hint = "Approach, %s to jump, then %s to hit" % [key_names.get("jump", "Z"), key_names.get("jump", "Z")]
 		box(Rect2(w / 2 - 218, 138, 436, 63), Color(0.055, 0.10, 0.17, 0.92), 12, Color("334d60"))
@@ -67,9 +67,9 @@ func _draw() -> void:
 		text_at(Vector2(w / 2, 185), hint, 12, MUTED, true)
 	elif game.phase == "point":
 		var color = BLUE if game.point_winner == 0 else ORANGE
-		box(Rect2(w / 2 - 172, 151, 344, 86), Color(0.055, 0.10, 0.17, 0.95), 14, Color(color, 0.4))
-		text_at(Vector2(w / 2, 187), "POINT NORTH" if game.point_winner == 0 else "POINT SOUTH", 24, color, true)
-		text_at(Vector2(w / 2, 215), game.point_reason, 11, WHITE, true)
+		# A scored rally only ticks the scoreboard; it never becomes a modal screen.
+		box(Rect2(w / 2 - 116, 108, 232, 34), Color(0.055, 0.10, 0.17, 0.84), 9, Color(color, 0.35))
+		text_at(Vector2(w / 2, 130), ("NORTH +1" if game.point_winner == 0 else "SOUTH +1") + "  ·  " + game.point_reason, 11, color, true)
 	elif game.phase == "rally":
 		var touch_text = "TOUCH %d / 3" % game.touches if game.touches else "BLOCK · BALL LIVE"
 		text_at(Vector2(w - 33, 116) - Vector2(font.get_string_size(touch_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x, 0), touch_text, 11, MUTED)

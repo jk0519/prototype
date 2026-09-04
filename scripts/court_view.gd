@@ -14,11 +14,17 @@ const NORTH_ATHLETE = preload("res://assets/art/animation/wing-spiker-north.png"
 const SOUTH_ATHLETE = preload("res://assets/art/animation/wing-spiker-south.png")
 const ATLAS_COLUMNS = 8
 const ATLAS_ROWS = 4
-const ATHLETE_DRAW_SIZE = 164.0
+# The atlas cells contain transparent margins; 120 world units renders the
+# visible grounded silhouette at roughly 48-58 px in a 1280 px match view.
+const ATHLETE_DRAW_SIZE = 120.0
 const FRAME_BASELINE = 360.0 / 384.0
 const FRAME_CONTACT_PIXELS = {
 	12: Vector2(246, 5),
 	22: Vector2(244, 27),
+	26: Vector2(192, 68),
+	27: Vector2(192, 47),
+	28: Vector2(204, 30),
+	29: Vector2(204, 5),
 }
 
 func advance(dt: float) -> void:
@@ -80,9 +86,9 @@ func _draw() -> void:
 			draw_line(Vector2(x + 18, 6), Vector2(x + 36, 6), CREAM, 2)
 	for p in game.players:
 		var spread = 1.0 - clampf(p.pos.y / 1100.0, 0, 0.5)
-		ellipse(Vector2(p.pos.x, 8), Vector2(22 * spread, 5 * spread), Color(0.03, 0.10, 0.14, 0.3))
+		ellipse(Vector2(p.pos.x, 8), Vector2(15 * spread, 4 * spread), Color(0.03, 0.10, 0.14, 0.3))
 		if p.id == game.human_id:
-			ellipse(Vector2(p.pos.x, 8), Vector2(27, 7), Color(BLUE, 0.42))
+			ellipse(Vector2(p.pos.x, 8), Vector2(20, 5), Color(BLUE, 0.42))
 	draw_net()
 	draw_impact_afterimages()
 	for p in game.players:
@@ -113,24 +119,21 @@ func _draw() -> void:
 		var quality: float = effect.quality
 		var perfect = quality >= 0.86 and effect.kind in ["serve", "spike", "block"]
 		var color = Color("ffe46b") if perfect else (ORANGE if effect.kind in ["spike", "block"] else BLUE)
-		var radius = 14 + effect.age * lerpf(240, 460, quality)
+		var radius = 12 + effect.age * lerpf(150, 280, quality)
 		if effect.kind in ["serve", "spike", "block", "set", "receive", "net"]:
 			draw_arc(pos, radius, 0, TAU, 32, Color(color, alpha * 0.82), 3.2, true)
 		if effect.kind in ["serve", "spike", "block"]:
 			var flash = clampf(1 - effect.age / 0.16, 0, 1)
 			draw_circle(pos, lerpf(22, 48, quality) * flash, Color(CREAM, flash * lerpf(0.24, 0.52, quality)))
-			var ray_count = 10 + roundi(quality * 12)
+			var ray_count = 5 + roundi(quality * 4)
 			for i in range(ray_count):
-				var ray = Vector2.from_angle(i * TAU / ray_count + 0.16) * (52 + effect.age * lerpf(260, 470, quality))
-				draw_line(pos + ray * 0.30, pos + ray, Color(CREAM, alpha * 0.86), 2.5 + quality * 2.0, true)
+				var ray = Vector2.from_angle(i * TAU / ray_count + 0.16) * (42 + effect.age * lerpf(170, 300, quality))
+				draw_line(pos + ray * 0.42, pos + ray, Color(CREAM, alpha * 0.78), 2.0 + quality, true)
 			draw_attack_speed_lines(effect, pos, color)
 			var slash = Vector2(36, -72) * Vector2(signf(effect.ball_velocity.x), 1)
 			draw_line(pos - slash, pos + slash, Color(CREAM, flash * 0.9), 7.0, true)
 			draw_line(pos - slash * 0.65, pos + slash * 0.65, Color(color, flash), 2.5, true)
-		if effect.kind in ["serve", "spike", "block"]:
-			var grade = "PERFECT" if quality >= 0.86 else ("SOLID" if quality >= 0.60 else "GLANCE")
-			caption(pos + Vector2(0, -76 - effect.age * 70), grade, 18, Color(color, alpha), true)
-		elif effect.kind == "set":
+		if effect.kind == "set":
 			caption(pos + Vector2(0, -35 - effect.age * 55), "SET", 15, Color(CREAM, alpha), true)
 		elif effect.kind in ["land", "skid", "slide", "floor"]:
 			var floor_pos = Vector2(pos.x, 2)
@@ -148,7 +151,7 @@ func impact_wash_alpha() -> float:
 	var result = 0.0
 	for effect in effects:
 		if effect.kind in ["serve", "spike", "block"]:
-			result = maxf(result, clampf(1.0 - effect.age / 0.055, 0, 1) * lerpf(0.025, 0.095, effect.quality))
+			result = maxf(result, clampf(1.0 - effect.age / 0.045, 0, 1) * lerpf(0.018, 0.060, effect.quality))
 	return result
 
 func draw_attack_speed_lines(effect: Dictionary, pos: Vector2, color: Color) -> void:
@@ -157,10 +160,10 @@ func draw_attack_speed_lines(effect: Dictionary, pos: Vector2, color: Color) -> 
 	var life = 1.0 - effect.age / 0.19
 	var direction = signf(effect.ball_velocity.x)
 	if direction == 0: direction = 1.0
-	for i in range(13):
-		var lane = float(i - 6)
-		var start = pos + Vector2(-direction * (45 + absf(lane) * 12), lane * 32)
-		var length = (170 + absf(lane) * 30) * lerpf(0.72, 1.25, effect.quality)
+	for i in range(7):
+		var lane = float(i - 3)
+		var start = pos + Vector2(-direction * (45 + absf(lane) * 12), lane * 38)
+		var length = (155 + absf(lane) * 27) * lerpf(0.72, 1.25, effect.quality)
 		draw_line(start, start - Vector2(direction * length, lane * 4), Color(color, life * (0.22 + effect.quality * 0.24)), 2.0 + effect.quality, true)
 
 func draw_impact_afterimages() -> void:
@@ -172,8 +175,8 @@ func draw_impact_afterimages() -> void:
 		var team_color = BLUE if effect.player_team == 0 else ORANGE
 		var direction = signf(effect.ball_velocity.x)
 		if direction == 0: direction = effect.player_facing
-		for copy in range(3, 0, -1):
-			var origin = Vector2(effect.player_position.x, -effect.player_position.y) - Vector2(direction * copy * 18, copy * 2)
+		for copy in range(2, 0, -1):
+			var origin = Vector2(effect.player_position.x, -effect.player_position.y) - Vector2(direction * copy * 13, copy * 2)
 			draw_set_transform(origin, 0.0, Vector2(effect.player_facing, 1.0))
 			var size = ATHLETE_DRAW_SIZE * (1.0 + copy * 0.018)
 			var destination = Rect2(Vector2(-size * 0.5, -size * FRAME_BASELINE), Vector2.ONE * size)
@@ -355,9 +358,18 @@ func draw_player(p) -> void:
 	draw_motion_streaks(p, origin, BLUE if p.team == 0 else ORANGE)
 	draw_set_transform(origin, pose_rotation, Vector2(p.facing * pose_scale.x, pose_scale.y))
 	var destination = Rect2(Vector2(-ATHLETE_DRAW_SIZE * 0.5, -ATHLETE_DRAW_SIZE * FRAME_BASELINE), Vector2.ONE * ATHLETE_DRAW_SIZE)
-	if p.swing_connected and FRAME_CONTACT_PIXELS.has(frame):
+	if FRAME_CONTACT_PIXELS.has(frame):
 		var art_hand = (FRAME_CONTACT_PIXELS[frame] - Vector2(192, 360)) * (ATHLETE_DRAW_SIZE / 384.0)
-		var physics_hand = Vector2(p.impact_hand.x, -p.impact_hand.y)
+		var physics_hand = Vector2.ZERO
+		if p.swing_connected:
+			physics_hand = Vector2(p.impact_hand.x, -p.impact_hand.y)
+		elif p.setting:
+			physics_hand = Vector2(0, -(p.config.height + 15))
+		elif p.blocking:
+			physics_hand = Vector2(24, -(p.config.reach + 7))
+		else:
+			var hand = p.skeleton().hand
+			physics_hand = Vector2(hand.x * p.facing, -hand.y)
 		destination.position += physics_hand - art_hand
 	draw_texture_rect_region(texture, destination, athlete_region(frame, texture))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

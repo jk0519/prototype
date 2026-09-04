@@ -72,6 +72,19 @@ func run() -> void:
 	main.court.trail.clear()
 	main.court.add_event({"kind": "block", "position": main.game.ball, "player": blocker.id})
 	await capture("block")
+	main.game.phase = "rally"
+	main.game.score = [4, 4]
+	main.game.award_point(0, "BALL DOWN")
+	for i in range(18):
+		main.game.step(1.0 / 120.0, {"move": 1.0})
+		main.court.advance(1.0 / 120.0)
+		main.update_camera(1.0 / 120.0)
+	await capture("point-flow")
+	for i in range(52):
+		main.game.step(1.0 / 120.0, {"move": 1.0})
+		main.court.advance(1.0 / 120.0)
+		main.update_camera(1.0 / 120.0)
+	await capture("next-serve")
 	main.show_settings()
 	for i in range(5): await process_frame
 	await capture("settings")

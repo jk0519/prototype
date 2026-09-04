@@ -38,11 +38,15 @@ func run() -> void:
 	main.sound.enabled = false
 	main.start_match()
 	await frames(42)
+	var serve_start_x = main.game.players[0].pos.x
 	Input.action_press("block")
 	Input.action_press("toss_raise")
-	await frames(18)
+	Input.action_press("right")
+	await frames(36)
 	Input.action_release("toss_raise")
-	expect(main.game.phase == "serve_aim" and main.game.toss_height > 580, "Actual X/W input aims the serve")
+	Input.action_release("right")
+	expect(main.game.phase == "serve_aim" and main.game.toss_height > 620 and main.game.toss_forward > main.game.TOSS_MIN_FORWARD, "Actual X/W input charges and raises the serve toss")
+	expect(main.game.players[0].pos.x > serve_start_x + 70, "Actual A/D input moves the server while charging")
 	Input.action_release("block")
 	await frames(34)
 	expect(main.game.phase == "serve_toss" and main.game.players[0].pos.y == 0, "Release tosses without jumping")
@@ -96,6 +100,13 @@ func run() -> void:
 	expect(game.last_player == 0 and game.metrics.receive == 1, "Human receive makes a real contact")
 	await frames(270)
 	expect(game.metrics.set >= 1, "AI setter follows up the human's receive")
+	game.phase = "rally"
+	game.score = [3, 3]
+	game.award_point(0, "BALL DOWN")
+	await frames(2)
+	expect(main.mode == "playing" and game.phase == "point", "An ordinary point keeps the match on the live court")
+	await frames(70)
+	expect(main.mode == "playing" and game.phase == "serve_ready" and game.score == [4, 3], "The next serve begins automatically after the score tick")
 	game.phase = "rally"
 	game.score = [14, 3]
 	game.award_point(0, "BALL DOWN")

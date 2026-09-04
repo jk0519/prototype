@@ -4,7 +4,7 @@ const Court = preload("res://scripts/court_view.gd")
 const HUD = preload("res://scripts/hud.gd")
 const Audio = preload("res://scripts/audio_feedback.gd")
 const DEFAULT_KEYS = {"left": KEY_A, "right": KEY_D, "jump": KEY_Z, "receive": KEY_SPACE, "block": KEY_X, "dive": KEY_C, "toss_raise": KEY_W, "toss_lower": KEY_S}
-const ACTION_NAMES = {"left": "Move left", "right": "Move right", "jump": "Jump / air swing", "receive": "Receive / pass", "block": "Block / hold to aim toss", "dive": "Slide / dive", "toss_raise": "Raise toss arc", "toss_lower": "Lower toss arc"}
+const ACTION_NAMES = {"left": "Move left", "right": "Move right", "jump": "Jump / air swing", "receive": "Receive / pass", "block": "Block / hold to charge toss", "dive": "Slide / dive", "toss_raise": "Raise toss arc", "toss_lower": "Lower toss arc"}
 
 var game = MatchModel.new()
 var court = Court.new()
@@ -29,6 +29,7 @@ var rebind_buttons: Dictionary = {}
 var shake: float = 0.0
 var impact_hold: float = 0.0
 var impact_zoom: float = 0.0
+var impact_tilt: float = 0.0
 var autoplay: bool = false
 var capture_path: String = ""
 var capture_time: float = 8.4
@@ -124,14 +125,16 @@ func _physics_process(dt: float) -> void:
 		sound.play(event)
 		if event.kind in ["spike", "serve"]:
 			var quality = float(event.get("quality", 0.62))
-			shake = lerpf(12.0, 28.0, quality) if effects_on else 0.0
-			impact_hold = lerpf(0.045, 0.115, quality) if effects_on else 0.0
-			impact_zoom = lerpf(0.11, 0.27, quality) if effects_on else 0.0
+			shake = lerpf(7.0, 16.0, quality) if effects_on else 0.0
+			impact_hold = lerpf(0.028, 0.068, quality) if effects_on else 0.0
+			impact_zoom = lerpf(0.025, 0.070, quality) if effects_on else 0.0
+			impact_tilt = -signf(game.ball_velocity.x) * lerpf(0.004, 0.016, quality) if effects_on else 0.0
 		elif event.kind == "block":
 			var quality = float(event.get("quality", 0.62))
-			shake = lerpf(10.0, 24.0, quality) if effects_on else 0.0
-			impact_hold = lerpf(0.040, 0.100, quality) if effects_on else 0.0
-			impact_zoom = lerpf(0.09, 0.23, quality) if effects_on else 0.0
+			shake = lerpf(8.0, 18.0, quality) if effects_on else 0.0
+			impact_hold = lerpf(0.032, 0.074, quality) if effects_on else 0.0
+			impact_zoom = lerpf(0.030, 0.075, quality) if effects_on else 0.0
+			impact_tilt = -signf(game.ball_velocity.x) * lerpf(0.005, 0.018, quality) if effects_on else 0.0
 	sound.update(game, dt)
 	if game.phase == "finished":
 		show_result()
@@ -159,21 +162,23 @@ func _process(dt: float) -> void:
 func update_camera(dt: float) -> void:
 	var viewport_size = get_viewport_rect().size
 	var player_x = game.players[game.human_id].pos.x
-	var lo = minf(player_x, minf(game.ball.x, 900)) - 190
-	var hi = maxf(player_x, maxf(game.ball.x, 1100)) + 190
-	# Keep the court readable and the athletes small. The camera supplies energy
-	# through tracking and impact punches instead of framing large character art.
-	var span = clampf(hi - lo, 1680, 2480)
-	var top = maxf(660, game.ball.y + 130)
-	if game.phase in ["serve_aim", "serve_windup", "serve_toss"]: top = maxf(top, game.toss_height + 110)
-	var target_zoom = clampf(minf(viewport_size.x / span, viewport_size.y * 0.70 / top), 0.46, 0.78)
-	var target_x = clampf((lo + hi) * 0.5, 400, 1560)
+	var lo = minf(player_x, minf(game.ball.x, 850)) - 210
+	var hi = maxf(player_x, maxf(game.ball.x, 1150)) + 210
+	# Normal play in The Spike reads as a wide court composition. High sets and
+	# serves pull wider still; impacts never enlarge the athletes.
+	var span = clampf(hi - lo, 2020, 2700)
+	var top = maxf(610, game.ball.y + 105)
+	if game.phase in ["serve_aim", "serve_windup", "serve_toss"]: top = maxf(top, game.toss_height + 85)
+	var target_zoom = clampf(minf(viewport_size.x / span, viewport_size.y * 0.74 / top), 0.40, 0.66)
+	var target_x = clampf((lo + hi) * 0.5, 260, 1740)
 	if mode == "playing" and game.phase == "rally":
 		target_x += clampf(game.ball_velocity.x * 0.05, -95, 95)
 	if mode == "title":
-		target_zoom = minf(viewport_size.x / 2120, viewport_size.y / 920)
+		target_zoom = minf(viewport_size.x / 2180, viewport_size.y / 960)
 		target_x = 1000
-	target_zoom = minf(target_zoom * (1.0 + impact_zoom), 1.0)
+	# A contact reveals more of the flight path for a few frames instead of
+	# punching into the hitter and changing the player-to-court ratio.
+	target_zoom *= 1.0 - impact_zoom
 	var target_y = -viewport_size.y * 0.26 / target_zoom
 	if mode == "playing" and game.phase == "rally":
 		target_y -= clampf(game.ball_velocity.y * 0.035, -38, 38)
@@ -182,7 +187,9 @@ func update_camera(dt: float) -> void:
 	camera.zoom = camera.zoom.lerp(Vector2.ONE * target_zoom, speed)
 	camera.position = camera.position.lerp(Vector2(target_x, target_y), speed)
 	shake = maxf(0, shake - dt * 46)
-	impact_zoom = maxf(0, impact_zoom - dt * 2.4)
+	impact_zoom = maxf(0, impact_zoom - dt * 2.8)
+	impact_tilt = move_toward(impact_tilt, 0.0, dt * 0.12)
+	camera.rotation = lerpf(camera.rotation, impact_tilt, 1.0 - exp(-dt * 15.0))
 	camera.offset = Vector2(sin(run_elapsed * 137), cos(run_elapsed * 111)) * shake
 
 func _input(event: InputEvent) -> void:
@@ -303,7 +310,7 @@ func show_title() -> void:
 	var start = add_menu_button("PLAY MATCH", start_match, true)
 	add_menu_button("Controls & settings", func(): settings_return = "title"; show_settings())
 	add_label("%s / %s  Move     %s  Jump, then spike     %s  Receive\n%s  Block     %s  Dive     ESC  Pause" % [key_label(keys.left), key_label(keys.right), key_label(keys.jump), key_label(keys.receive), key_label(keys.block), key_label(keys.dive)], 12, Color("a3bec9"))
-	add_label("Serve: hold %s, aim, release to toss. Jump and hit with %s." % [key_label(keys.block), key_label(keys.jump)], 12, Color("a3bec9"))
+	add_label("Serve: move while holding %s to charge, then release. Jump and hit with %s." % [key_label(keys.block), key_label(keys.jump)], 12, Color("a3bec9"))
 	add_menu_button("Quit", func(): get_tree().quit())
 	start.grab_focus.call_deferred()
 
@@ -311,7 +318,9 @@ func start_match() -> void:
 	sound.stop_all()
 	impact_hold = 0
 	impact_zoom = 0
+	impact_tilt = 0
 	shake = 0
+	camera.rotation = 0
 	game.reset()
 	court.trail.clear()
 	court.effects.clear()

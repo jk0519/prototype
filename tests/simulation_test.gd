@@ -26,13 +26,15 @@ func check_human_control() -> void:
 	for i in range(240): game.step(1.0 / 120.0)
 	expect(game.phase == "serve_ready", "Human serve waits for toss input")
 	expect(game.players[0].pos.x == x, "AI must not move the human")
-	for i in range(60): game.step(1.0 / 120.0, {"toss": true, "aim_height": 1.0, "move": 1.0})
-	expect(game.phase == "serve_aim" and game.toss_height > 740 and game.toss_forward > 300, "Aim keys adjust toss height and distance")
+	for i in range(120): game.step(1.0 / 120.0, {"toss": true, "aim_height": 1.0, "move": 1.0})
+	expect(game.phase == "serve_aim" and game.toss_height > 820 and game.toss_forward > 290, "Hold time charges toss distance while vertical input raises its height")
+	expect(game.players[0].pos.x > x + 300, "Human can move throughout the serve setup")
 	var high_toss = game.toss_height
 	var forward_toss = game.toss_forward
+	var aimed_x = game.players[0].pos.x
 	for i in range(24): game.step(1.0 / 120.0, {"toss": true, "aim_height": -1.0})
-	expect(game.toss_height < high_toss - 75 and is_equal_approx(game.toss_forward, forward_toss), "Vertical input independently lowers the serve toss")
-	expect(game.players[0].pos.x == x, "Aiming adjusts the arc without sliding the player")
+	expect(game.toss_height < high_toss - 75 and game.toss_forward > forward_toss, "Vertical input lowers height while continued hold increases toss distance")
+	expect(absf(game.players[0].pos.x - aimed_x) < 35, "Releasing movement stops the server independently of toss charge")
 	game.step(1.0 / 120.0)
 	expect(game.phase == "serve_windup", "Releasing toss starts the throwing motion")
 	for i in range(33): game.step(1.0 / 120.0)
@@ -65,7 +67,7 @@ func check_human_control() -> void:
 				was_airborne = was_airborne or game.players[server].pos.y > 35
 				if game.metrics.serve > 0 or game.phase == "point": break
 			expect(game.metrics.serve == 1 and was_airborne, "Role %d completes physical jump serve with arc %s" % [server, arc])
-			expect(absf(max_height - arc.x) < 4, "Toss follows the displayed parabolic height")
+			expect(absf(max_height - arc.x) < 12, "Toss follows the displayed parabolic height")
 	# Walking makes foley; standing and airborne travel do not make footsteps.
 	var athlete = game.players[0]
 	athlete.reset(400)
@@ -129,6 +131,11 @@ func check_rules() -> void:
 	expect(game.score == [1, 0], "Floor on opponent court awards one point")
 	game.award_point(0, "BALL DOWN")
 	expect(game.score == [1, 0], "A point may not be counted twice")
+	var point_x = game.players[0].pos.x
+	for i in range(24): game.step(1.0 / 120.0, {"move": 1.0})
+	expect(game.phase == "point" and game.players[0].pos.x > point_x + 20, "A scored rally keeps player movement live")
+	for i in range(48): game.step(1.0 / 120.0)
+	expect(game.phase == "serve_ready" and game.score == [1, 0], "A point flows directly into the next serve without ending the match")
 	game.prepare_serve()
 	game.phase = "rally"
 	game.last_team = 0

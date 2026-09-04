@@ -9,10 +9,11 @@ const NET_X: float = 1000.0
 const NET_HEIGHT: float = 207.0
 const COURT_LEFT: float = 180.0
 const COURT_RIGHT: float = 1820.0
-const TOSS_MIN_HEIGHT: float = 340.0
+const TOSS_MIN_HEIGHT: float = 400.0
 const TOSS_MAX_HEIGHT: float = 940.0
-const TOSS_MIN_FORWARD: float = 55.0
-const TOSS_MAX_FORWARD: float = 440.0
+const TOSS_MIN_FORWARD: float = 120.0
+const TOSS_MAX_FORWARD: float = 480.0
+const POINT_TRANSITION_DURATION: float = 0.52
 
 var players: Array = []
 var ai = AI.new()
@@ -65,7 +66,7 @@ func _init(seed_value: int = 7):
 func reset() -> void:
 	score = [0, 0]
 	toss_height = 560
-	toss_forward = 210
+	toss_forward = TOSS_MIN_FORWARD
 	serving_team = 0
 	serve_order = [0, -1]
 	server_id = 0
@@ -96,6 +97,7 @@ func prepare_serve() -> void:
 	server.reset(-125.0 if serving_team == 0 else 2125.0)
 	server.serve_pose = "ready"
 	serve_charge = 0
+	toss_forward = TOSS_MIN_FORWARD
 	ball = server.pos + server.skeleton().other_hand + Vector2(0, BALL_RADIUS)
 	previous_ball = ball
 	ball_velocity = Vector2.ZERO
@@ -164,8 +166,12 @@ func step(dt: float, human_intent: Dictionary = {}, all_ai: bool = false) -> voi
 	contact_lock = maxf(0, contact_lock - dt)
 	net_lock = maxf(0, net_lock - dt)
 	if phase == "point":
-		step_athletes(dt, [{}, {}, {}, {}, {}, {}])
-		if phase_time >= 0.95: prepare_serve()
+		# The court stays live between rallies. Players can keep running while the
+		# score ticks over, then the next server is staged without a modal pause.
+		var point_intents = ai.intentions(self, all_ai)
+		if not all_ai: point_intents[human_id] = human_intent
+		step_athletes(dt, point_intents)
+		if phase_time >= POINT_TRANSITION_DURATION: prepare_serve()
 		return
 	var intents = ai.intentions(self, all_ai)
 	if not all_ai: intents[human_id] = human_intent
@@ -176,15 +182,19 @@ func step(dt: float, human_intent: Dictionary = {}, all_ai: bool = false) -> voi
 			phase = "serve_aim"
 			phase_time = 0
 		if phase == "serve_aim":
-			toss_forward = clampf(toss_forward + input.get("move", 0.0) * server.facing * dt * 220, TOSS_MIN_FORWARD, TOSS_MAX_FORWARD)
 			toss_height = clampf(toss_height + input.get("aim_height", 0.0) * dt * 420, TOSS_MIN_HEIGHT, TOSS_MAX_HEIGHT)
-			serve_charge = minf(1, serve_charge + dt * 0.65)
+			# The Spike's serve button controls toss distance by hold time. A/D stays
+			# movement throughout the setup so the player can choose the run-up.
+			serve_charge = minf(1, serve_charge + dt * 0.78)
+			var charged = smoothstep(0.0, 1.0, serve_charge)
+			toss_forward = lerpf(TOSS_MIN_FORWARD, TOSS_MAX_FORWARD, charged)
 			if phase_time > 0.1 and not input.get("toss", false):
 				phase = "serve_windup"
 				phase_time = 0
 		server.serve_pose = {"serve_ready": "ready", "serve_aim": "aim", "serve_windup": "windup"}[phase]
 		server.serve_pose_time = phase_time
-		intents[server_id] = {}
+		# Do not pass block/toss through to Athlete: only retain horizontal motion.
+		intents[server_id] = {"move": input.get("move", 0.0)}
 		step_athletes(dt, intents)
 		ball = server.pos + server.skeleton().other_hand + Vector2(0, BALL_RADIUS)
 		previous_ball = ball
