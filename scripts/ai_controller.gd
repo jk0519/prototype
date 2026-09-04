@@ -33,9 +33,17 @@ func intentions(game, all_ai: bool) -> Array:
 		if our_possession and game.touches == 1:
 			var setter_id = game.setter_for(side)
 			var setter = game.players[setter_id]
-			var t = game.time_to_height(setter.config.height + 15)
+			# A high pass is taken above the forehead. The setter plants once,
+			# keeps the setting pose in the air, and contacts through the same
+			# physical hand area used on the ground.
+			var jump_set = game.ball.y > setter.config.height + 145
+			var contact_height = setter.config.height + (145 if jump_set else 15)
+			var t = game.time_to_height(contact_height)
 			var x = game.ball.x + game.ball_velocity.x * t
-			result[setter_id] = {"move": toward(setter, x), "set": true}
+			var set_intent = {"move": toward(setter, x), "set": true}
+			if jump_set and setter.pos.y <= 0.01 and setter.jump_prepare <= 0 and t < 0.43:
+				set_intent["jump"] = true
+			result[setter_id] = set_intent
 			# Give the wing an approach while the pass travels toward the setter.
 			var wing = game.players[side * 3]
 			result[wing.id] = {"move": toward(wing, game.attack_x(side) - wing.facing * 100)}
@@ -68,7 +76,7 @@ func intentions(game, all_ai: bool) -> Array:
 			if receiver_id >= 0 and landing > 175 and landing < 1825:
 				var receiver = game.players[receiver_id]
 				var intent = {"move": toward(receiver, landing - receiver.facing * 24 + game.ai_error_x[receiver.id] * (0.45 if game.last_action == "serve" else 1.0)), "receive": true}
-				if our_half and time_low < 0.18 and absf(receiver.pos.x - landing) > 75:
+				if our_half and time_low < 0.32 and absf(receiver.pos.x - landing) > 58:
 					intent["dive"] = true
 				result[receiver_id] = intent
 		# The middle follows the opposing attacker along the net and blocks.

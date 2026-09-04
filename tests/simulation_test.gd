@@ -5,6 +5,7 @@ var failures: Array = []
 func _initialize() -> void:
 	check_human_control()
 	check_rules()
+	check_arcade_mechanics()
 	for seed_value in [7, 21, 83]:
 		check_match(seed_value)
 	if failures.is_empty():
@@ -84,6 +85,9 @@ func check_human_control() -> void:
 	athlete.confirm_hit()
 	for i in range(8): athlete.step(1.0 / 120.0, {})
 	expect(athlete.swing_elapsed > 0.12 and athlete.swing_timer == 0, "Follow-through cannot hit the ball twice")
+	athlete.reset(400)
+	athlete.step(1.0 / 120.0, {"move": 1.0, "dive": true})
+	expect(athlete.dive_timer > 0.35 and athlete.velocity.x >= athlete.config.dive_speed, "Dive input launches a full-body floor save")
 	var pose_player = MatchModel.new().players[0]
 	pose_player.serve_pose = "windup"
 	pose_player.serve_pose_time = 0.22
@@ -164,6 +168,39 @@ func check_rules() -> void:
 	impact_game.ball_velocity = Vector2(-1900, -300)
 	impact_game.contact(impact_game.players[2], "block")
 	expect(impact_game.events[-1].quality > 0.75 and impact_game.ball_velocity.x > 1850 and impact_game.ball_velocity.y < -425, "Fast spike produces a forceful high-grade block rebound")
+
+func check_arcade_mechanics() -> void:
+	var game = MatchModel.new(13)
+	var server = game.players[0]
+	game.phase = "serve_toss"
+	server.pos.y = 185
+	server.swing_elapsed = 0.082
+	game.ball = server.contact_center("serve")
+	game.previous_ball = game.ball
+	game.serve(server)
+	expect(game.ball_topspin > 1200 and game.ball_velocity.length() > 2700, "Perfect jump serve launches fast with strong topspin")
+	var initial_vertical = game.ball_velocity.y
+	game.contact_lock = 2
+	game.step_ball(0.2)
+	expect(game.ball_velocity.y < initial_vertical - 500, "Topspin visibly accelerates the serve downward")
+
+	game = MatchModel.new(14)
+	game.ball = Vector2(620, 155)
+	game.set_ball(0)
+	var set_apex = game.ball.y + game.ball_velocity.y * game.ball_velocity.y / (2.0 * game.BALL_GRAVITY)
+	expect(set_apex >= 509 and game.ball_topspin == 0, "Set rises into a large clean attack arc")
+
+	game.phase = "rally"
+	game.last_team = 0
+	game.last_player = 0
+	game.last_action = "receive"
+	game.touches = 1
+	var setter = game.players[1]
+	setter.reset(setter.home_x)
+	game.ball = Vector2(setter.pos.x, 600)
+	game.ball_velocity = Vector2(0, -500)
+	var intentions = game.ai.intentions(game, true)
+	expect(intentions[setter.id].get("set", false) and intentions[setter.id].get("jump", false), "AI setter jumps to take a high pass")
 
 func check_match(seed_value: int) -> void:
 	var game = MatchModel.new(seed_value)

@@ -21,6 +21,9 @@ var human_id: int = 0
 var ball = Vector2(160, 135)
 var previous_ball = ball
 var ball_velocity = Vector2.ZERO
+## Extra downward acceleration carried by attacking contacts. A jump serve has
+## the strongest topspin, while passes and sets deliberately remove it.
+var ball_topspin: float = 0.0
 var score: Array = [0, 0]
 var target_score: int = 15
 var phase: String = "serve_ready"
@@ -96,6 +99,7 @@ func prepare_serve() -> void:
 	ball = server.pos + server.skeleton().other_hand + Vector2(0, BALL_RADIUS)
 	previous_ball = ball
 	ball_velocity = Vector2.ZERO
+	ball_topspin = 0
 	refresh_ai_accuracy()
 
 func refresh_ai_accuracy() -> void:
@@ -117,10 +121,14 @@ func setter_for(side: int) -> int:
 
 func time_to_height(height: float) -> float:
 	# The descending intersection, shared by all AI roles.
-	var discriminant = ball_velocity.y * ball_velocity.y + 2 * BALL_GRAVITY * (ball.y - height)
+	var gravity = ball_gravity()
+	var discriminant = ball_velocity.y * ball_velocity.y + 2 * gravity * (ball.y - height)
 	if discriminant < 0:
 		return 0.0
-	return maxf(0, (ball_velocity.y + sqrt(discriminant)) / BALL_GRAVITY)
+	return maxf(0, (ball_velocity.y + sqrt(discriminant)) / gravity)
+
+func ball_gravity() -> float:
+	return BALL_GRAVITY + ball_topspin
 
 func toss_origin() -> Vector2:
 	var server = players[server_id]
@@ -183,6 +191,7 @@ func step(dt: float, human_intent: Dictionary = {}, all_ai: bool = false) -> voi
 		if phase == "serve_windup" and phase_time >= 0.26:
 			ball = toss_origin()
 			previous_ball = ball
+			ball_topspin = 0
 			ball_velocity = toss_velocity()
 			phase = "serve_toss"
 			phase_time = 0
@@ -205,7 +214,7 @@ func step(dt: float, human_intent: Dictionary = {}, all_ai: bool = false) -> voi
 
 func step_ball(dt: float) -> void:
 	previous_ball = ball
-	ball_velocity.y -= BALL_GRAVITY * dt
+	ball_velocity.y -= ball_gravity() * dt
 	ball += ball_velocity * dt
 	if contact_lock <= 0:
 		check_contacts()
@@ -309,9 +318,12 @@ func serve(p) -> void:
 	ball = p.contact_center("serve") + Vector2(p.facing * BALL_RADIUS, 0)
 	var target = 1580.0 + rng.randf_range(-120, 120) if p.team == 0 else 420.0 + rng.randf_range(-120, 120)
 	var height_power = clampf((ball.y - 205) / 135.0, 0, 1)
-	var strike_speed = p.config.spike_speed * lerpf(0.78, 1.18, quality) * lerpf(0.92, 1.05, height_power)
-	var flight = maxf(0.48, absf(target - ball.x) / strike_speed)
-	ball_velocity = arc_to(Vector2(target, 75), flight)
+	# A clean jump serve is fast and initially flat, then its strong topspin
+	# pulls the ball sharply into the back court.
+	var strike_speed = p.config.spike_speed * lerpf(0.92, 1.34, quality) * lerpf(0.96, 1.07, height_power)
+	var flight = maxf(0.36, absf(target - ball.x) / strike_speed)
+	ball_topspin = lerpf(720.0, 1320.0, quality)
+	ball_velocity = arc_to(Vector2(target, 58), flight, ball_gravity())
 	if p.id == human_id:
 		best_hit_speed = maxf(best_hit_speed, ball_velocity.length())
 	rally_contacts += 1
@@ -338,6 +350,7 @@ func contact(p, action: String) -> void:
 	var quality = 0.62
 	match action:
 		"block":
+			ball_topspin = 120.0
 			var incoming = ball_velocity.length()
 			quality = clampf((incoming - 700.0) / 1500.0, 0.25, 1.0)
 			ball_velocity = Vector2(p.facing * maxf(950, absf(ball_velocity.x) * lerpf(0.84, 1.05, quality)), -lerpf(270, 480, quality))
@@ -349,12 +362,14 @@ func contact(p, action: String) -> void:
 			if p.id == human_id:
 				depth = 605.0 - p.last_move * p.facing * 125.0
 			var target = NET_X + p.facing * depth
-			var strike_speed = p.config.spike_speed * lerpf(0.78, 1.22, quality)
+			var strike_speed = p.config.spike_speed * lerpf(0.80, 1.26, quality)
 			var flight = maxf(0.28, absf(target - ball.x) / strike_speed)
-			ball_velocity = arc_to(Vector2(target, BALL_RADIUS), flight)
+			ball_topspin = lerpf(280.0, 620.0, quality)
+			ball_velocity = arc_to(Vector2(target, BALL_RADIUS), flight, ball_gravity())
 		"set":
 			set_ball(p.team)
 		_:
+			ball_topspin = 0
 			if touches == 1:
 				var setter = players[setter_for(p.team)]
 				var target = Vector2(clampf(setter.pos.x, 360, 790) if p.team == 0 else clampf(setter.pos.x, 1210, 1640), setter.config.height + 15)
@@ -383,13 +398,16 @@ func contact(p, action: String) -> void:
 	emit_event(action, ball, p.id, details)
 
 func set_ball(side: int) -> void:
-	var apex = maxf(370.0, ball.y + 60)
+	ball_topspin = 0
+	# High, readable sets give the wing time for a full approach and let the
+	# setter take the ball in the air without flattening the attack window.
+	var apex = maxf(510.0, ball.y + 155)
 	var vy = sqrt(2 * BALL_GRAVITY * (apex - ball.y))
-	var flight = vy / BALL_GRAVITY + sqrt(2 * (apex - 300.0) / BALL_GRAVITY)
+	var flight = vy / BALL_GRAVITY + sqrt(2 * (apex - 325.0) / BALL_GRAVITY)
 	ball_velocity = Vector2((attack_x(side) - ball.x) / flight, vy)
 
-func arc_to(target: Vector2, flight: float) -> Vector2:
-	return Vector2((target.x - ball.x) / flight, (target.y - ball.y + 0.5 * BALL_GRAVITY * flight * flight) / flight)
+func arc_to(target: Vector2, flight: float, gravity: float = BALL_GRAVITY) -> Vector2:
+	return Vector2((target.x - ball.x) / flight, (target.y - ball.y + 0.5 * gravity * flight * flight) / flight)
 
 func emit_event(kind: String, position: Vector2, player_id: int = -1, details: Dictionary = {}) -> void:
 	if kind in ["serve", "receive", "set", "spike", "block", "dive", "free"]:
@@ -412,6 +430,7 @@ func award_point(winner: int, reason: String) -> void:
 		serve_order[winner] = (serve_order[winner] + 1) % 3
 	serving_team = winner
 	ball_velocity = Vector2.ZERO
+	ball_topspin = 0
 	phase_time = 0
 	if score[winner] >= target_score and score[winner] - score[1 - winner] >= 2:
 		phase = "finished"

@@ -1,6 +1,6 @@
-# SIDEOUT — body mechanics and contact update
+# SIDEOUT — faceless athletes and topspin update
 
-A Mac-first, 2D volleyball prototype inspired by the basic play of The Spike: six athletes, one human wing spiker, and five AI players. Built in **Godot 4.7.2**, with original anime-style procedural athletes, a reactive camera, and recorded court audio.
+A Mac-first, 2D volleyball prototype inspired by the basic play of The Spike: six athletes, one human wing spiker, and five AI players. Built in **Godot 4.7.2**, with original faceless anime-style athletes, a reactive camera, and recorded court audio.
 
 ## Play on Mac
 
@@ -33,14 +33,14 @@ Keyboard bindings, separate court/crowd volume sliders, sound, impact effects, a
 
 - Two teams of three, each with a wing spiker, setter, and middle blocker.
 - Human control of the left wing spiker; five AI players use the same movement and contact mechanics.
-- AI receiving, setting, attacking, blocking, serving, diving, and a fallback setter when the normal setter takes the first touch.
+- AI receiving, ground and jump setting, attacking, blocking, serving, earlier emergency dives, and a fallback setter when the normal setter takes the first touch.
 - Adjustable jump serves with a displayed parabola, hand-led toss motion, approach, foot plant, takeoff, timed contact, follow-through, and landing compression. AI servers use the same mechanics.
 - Independent horizontal and vertical serve-toss aiming with wider, faster adjustment, a live percentage meter, and both WASD and arrow-key support.
 - Arcade-fast acceleration and movement, shorter jump airtime, running strides tied to distance, timed air swings, ground receives, blocks, and full-body dives.
-- Ball gravity, contact areas, a solid net, floor/out detection, three-touch and double-touch faults, and block touches that keep the ball live.
-- Role-based passing and set arcs, with actual contact timing determining whether a hit succeeds.
+- Ball gravity, serve and spike topspin, contact areas, a solid net, floor/out detection, three-touch and double-touch faults, and block touches that keep the ball live. Jump serves leave the hand faster and bend sharply down into the back court.
+- Role-based passing and larger set arcs, including airborne setter contacts, with actual contact timing determining whether a hit succeeds.
 - A full serve/rally/point/match-result loop, rotating servers on side-out, score display, and win-by-two scoring.
-- Six lean, connected athletes with tapered upper and lower limbs, separate shoulder and hip anchors, sleeves, narrow knee pads, fitted uniforms, neutral faces, restrained hair, hands, and court shoes. The same joint system drives tosses, runs, plants, jumps, strikes, blocks, receives, landings, and dives. Serves and spikes animate a continuous backward coil, sideways hip-and-shoulder snap, head and torso flex, leg scissor, follow-through, and falling recovery.
+- Six lean, faceless athletes rendered from original illustrated pose art, with blank faces, long limbs, fitted team uniforms, knee pads, hands, hair, and court shoes. Eight readable silhouettes cover ready/receive, crouch, run, jump, windup, spike, block/jump-set, and dive actions; small motion transforms and effects keep them alive between contacts.
 - Skill-graded spike and serve contact based on swing-frame timing and palm alignment. Contact quality changes actual ball speed and every feedback layer; the match records your best speed.
 - Longer ball and player streaks, graded contact bursts, swing arcs, a brief impact hold, punch zoom, strong camera shake, velocity look-ahead, and fast camera tracking. Blocks reverse the spike with a sharp downward rebound.
 - Multiple contacts cut from a real CC0 indoor volleyball game supply distinct spikes, serves, blocks, passes, sets, floor hits, and landings with their natural gym reflections intact. Each action randomly selects a related take and plays one clean contact. A quiet real-gym room bed, selective shoe squeaks, slides, a restrained swing whoosh, and a wordless serve crowd keep the court alive without masking the ball. Pause and mute stop ongoing audio.
@@ -53,7 +53,7 @@ This is an arcade baseline. Roles stay in fixed formations; it does not implemen
 2. Import `project.godot` into Godot, then press **F6** on the main scene or **F5** to run the project.
 3. To export a Mac app, install the matching export templates through Godot's **Manage Export Templates** dialog, then use the **macOS** export preset.
 
-The repository contains the complete editable project. It has no package-manager dependencies or external art downloads. Godot's generated `.godot` cache and application builds are excluded from version control.
+The repository contains the complete editable project. It has no runtime package-manager dependencies or external art downloads. Godot's generated `.godot` cache and application builds are excluded from version control. The selected athlete concept and the prepared transparent pose textures are stored under `assets/art`; `tools/prepare_athlete_sprites.py` reproduces the crops and the orange-team palette with Pillow and NumPy.
 
 ## Development and verification
 
@@ -73,10 +73,10 @@ The optional **Web QA** preset runs the same scene for browser-based visual/inpu
 
 ## Engine notices
 
-Godot and its bundled third-party dependencies retain their respective licenses. The generated `assets/engine_notices.txt` contains the notices reported by this engine version. All court graphics and character shapes in this project are drawn by its own code.
+Godot and its bundled third-party dependencies retain their respective licenses. The generated `assets/engine_notices.txt` contains the notices reported by this engine version. The court graphics and athlete illustrations are original project assets.
 
 ## Audio sources
 
 The bundled foley and wordless crowd recordings are CC0. See [audio credits](assets/audio/CREDITS.md) for creators, source links, and edits. `tools/prepare_audio.py` reproduces the prepared samples using Python with numpy/scipy and ffmpeg. No assets were extracted from The Spike. Running or building the game needs no audio downloads or Python packages.
 
-For silent visual checks, launch with `-- --mute`. `tests/visual_capture.gd` captures native screenshots of the toss, plant, jump, contact, follow-through, and settings; use `--audio-driver Dummy` and `-- --visual-output=/absolute/output/folder --mute`.
+For silent visual checks, launch with `-- --mute`. `tests/visual_capture.gd` captures native screenshots of the toss, plant, jump, contact, follow-through, dive, jump-set, block, and settings; use `--audio-driver Dummy` and `-- --visual-output=/absolute/output/folder --mute`.

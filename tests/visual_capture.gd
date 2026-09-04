@@ -52,6 +52,16 @@ func run() -> void:
 	diver.velocity = Vector2(760, 0)
 	await capture("dive")
 	diver.reset(diver.home_x)
+	var setter = main.game.players[1]
+	setter.reset(560)
+	setter.pos.y = 145
+	setter.setting = true
+	main.game.ball = setter.contact_center("set") + Vector2(0, 8)
+	main.court.effects.clear()
+	main.court.trail.clear()
+	main.court.add_event({"kind": "set", "position": main.game.ball, "player": setter.id})
+	await capture("jump-set")
+	setter.reset(setter.home_x)
 	var blocker = main.game.players[2]
 	blocker.reset(940)
 	blocker.pos.y = 150

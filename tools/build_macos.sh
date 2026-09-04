@@ -19,3 +19,10 @@ codesign --verify --deep --strict "$STAGE_DIR/SIDEOUT.app"
 ditto -c -k --norsrc --keepParent "$STAGE_DIR/SIDEOUT.app" builds/SIDEOUT-Mac.zip
 mv "$STAGE_DIR/SIDEOUT.app" builds/SIDEOUT.app
 rmdir "$STAGE_DIR"
+# Moving the verified app back into a File Provider folder can immediately add
+# an empty FinderInfo attribute. Remove that cosmetic metadata once more so the
+# app stored in builds/ passes the same strict verification as the release zip.
+if xattr -p com.apple.FinderInfo builds/SIDEOUT.app >/dev/null 2>&1; then
+    xattr -d com.apple.FinderInfo builds/SIDEOUT.app
+fi
+codesign --verify --deep --strict builds/SIDEOUT.app

@@ -4,3 +4,4 @@ builds/
 *.dmg
 .DS_Store
 test-output/
+reference/

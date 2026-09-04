@@ -161,7 +161,9 @@ func skeleton() -> Dictionary:
 	var running = absf(velocity.x) > 20 and pos.y < 1
 	var stride = sin(run_clock) * 19 if running else 0.0
 	var lean = clampf(velocity.x * facing / 65, -6, 6)
-	var crouch = 10.0 if receiving and pos.y < 1 else 0.0
+	# Even the idle silhouette keeps a slight ready stance; receives compress it
+	# further. This avoids the rigid mannequin pose between contacts.
+	var crouch = (12.0 if receiving else 4.0) if pos.y < 1 else 0.0
 	if jump_prepare > 0: crouch += 17 * sin((1 - jump_prepare / 0.085) * PI * 0.75)
 	crouch += 12 * (landing_timer / 0.16)
 	var bounce = absf(cos(run_clock)) * 2 if running else 0.0
@@ -252,9 +254,11 @@ func skeleton() -> Dictionary:
 		joints.other_elbow = Vector2(-14, 108 * h)
 		joints.other_hand = Vector2(15, config.reach + 7)
 	elif setting:
-		joints.elbow = Vector2(23, 97 * h)
+		var air_lift = minf(pos.y * 0.025, 6.0)
+		joints.shoulder.y += air_lift
+		joints.elbow = Vector2(23, 99 * h + air_lift)
 		joints.hand = Vector2(7, config.height + 15)
-		joints.other_elbow = Vector2(-23, 97 * h)
+		joints.other_elbow = Vector2(-23, 99 * h + air_lift)
 		joints.other_hand = Vector2(-7, config.height + 15)
 	elif receiving:
 		joints.elbow = Vector2(13, 65)

@@ -6,6 +6,7 @@ var trail: Array = []
 var clock: float = 0
 var landing_guide: bool = true
 var font = ThemeDB.fallback_font
+var athlete_textures: Dictionary = {}
 const INK = Color("15283d")
 const CREAM = Color("f0f6ec")
 const BLUE = Color("4ecbff")
@@ -72,7 +73,8 @@ func _draw() -> void:
 		for i in range(5):
 			var offset = back.orthogonal() * (i - 2) * 4
 			draw_line(ball_screen + back * 14 + offset, ball_screen + back * (length - abs(i - 2) * 11) + offset, Color(CREAM, 0.34 - abs(i - 2) * 0.045), 2.5, true)
-	draw_ball(Vector2(game.ball.x, -game.ball.y), game.time * 5)
+	var spin_direction = -signf(game.ball_velocity.x) if absf(game.ball_velocity.x) > 1 else 1.0
+	draw_ball(Vector2(game.ball.x, -game.ball.y), game.time * (5.0 + game.ball_topspin * 0.012) * spin_direction)
 	for effect in effects:
 		var pos = Vector2(effect.position.x, -effect.position.y)
 		var alpha = clampf(1 - effect.age / 0.42, 0, 1)
@@ -204,19 +206,19 @@ func shoulder_anchor(center: Vector2, toward: Vector2, across: Vector2, width: f
 func draw_arm(root: Vector2, elbow: Vector2, hand: Vector2, skin: Color, jersey: Color, behind: bool) -> void:
 	var shade = skin.darkened(0.10) if behind else skin
 	var sleeve_end = root.lerp(elbow, 0.25)
-	tapered_segment(root, sleeve_end, 7.2, 6.3, jersey.darkened(0.08) if behind else jersey, 2.0)
-	tapered_segment(sleeve_end, elbow, 5.6, 4.7, shade, 2.0)
-	tapered_segment(elbow, hand, 4.5, 3.4, shade, 2.0)
-	oriented_ellipse(hand, hand - elbow, 5.2, 3.7, shade, 1.8)
+	tapered_segment(root, sleeve_end, 6.4, 5.4, jersey.darkened(0.08) if behind else jersey, 1.5)
+	tapered_segment(sleeve_end, elbow, 4.8, 3.9, shade, 1.5)
+	tapered_segment(elbow, hand, 3.9, 2.9, shade, 1.45)
+	oriented_ellipse(hand, hand - elbow, 4.6, 3.1, shade, 1.35)
 
 func draw_leg(root: Vector2, knee: Vector2, foot: Vector2, skin: Color, team_color: Color, behind: bool) -> void:
 	var shade = skin.darkened(0.10) if behind else skin
-	tapered_segment(root, knee, 7.0, 5.8, shade, 2.2)
-	tapered_segment(knee, foot, 5.1, 3.8, shade, 2.1)
+	tapered_segment(root, knee, 6.4, 5.1, shade, 1.65)
+	tapered_segment(knee, foot, 4.7, 3.4, shade, 1.55)
 	var lower_axis = foot - knee
 	# Slim dark knee pads hide the segment seam and make the silhouette read as
 	# volleyball gear instead of a ball-and-socket toy joint.
-	oriented_ellipse(knee + lower_axis.normalized() * 1.5, lower_axis, 6.1, 6.4, Color("172434") if behind else Color("1d3042"), 1.8)
+	oriented_ellipse(knee + lower_axis.normalized() * 1.5, lower_axis, 5.6, 6.0, Color("172434") if behind else Color("1d3042"), 1.4)
 
 func torso_shape(shoulder: Vector2, hip: Vector2, upper: float, lower: float) -> PackedVector2Array:
 	var axis = (hip - shoulder).normalized()
@@ -239,7 +241,7 @@ func draw_shoe(foot: Vector2, direction: float, accent: Color, back: bool) -> vo
 		sole + Vector2(d * 11, 2),
 		sole - Vector2(d * 6, -2)
 	])
-	outlined_poly(shoe, shade, INK, 2.5)
+	outlined_poly(shoe, shade, INK, 1.7)
 	draw_line(foot + Vector2(d * 2, -2), foot + Vector2(d * 9, 0), accent, 2, true)
 
 func head_point(head: Vector2, up: Vector2, side: Vector2, x: float, y: float) -> Vector2:
@@ -249,9 +251,9 @@ func draw_head(head: Vector2, shoulder: Vector2, facing: float, skin: Color, hai
 	var up = (head - shoulder).normalized()
 	if up.length_squared() < 0.01: up = Vector2.UP
 	var side = Vector2(-up.y, up.x)
-	# A smaller oval head and restrained hair keep the player athletic rather
-	# than chibi. The oval follows the neck so torso flex carries into the head.
-	oriented_ellipse(head, up, 14.5, 11.2, skin, 2.1)
+	# The face is intentionally blank. Expression comes from the silhouette,
+	# hair, torso angle, and pose instead of eyes or a mouth.
+	oriented_ellipse(head, up, 14.0, 10.4, skin, 1.5)
 	var lift = float(style) * 0.8
 	var hair_points = PackedVector2Array([
 		head_point(head, up, side, -11.2, 2.0),
@@ -271,14 +273,7 @@ func draw_head(head: Vector2, shoulder: Vector2, facing: float, skin: Color, hai
 		for i in range(hair_points.size()):
 			var offset = hair_points[i] - head
 			hair_points[i] = head - side * offset.dot(side) + up * offset.dot(up)
-	outlined_poly(hair_points, hair, INK, 2.0)
-	# One calm eye and a level mouth remain readable without giving every player
-	# a permanent angry expression.
-	var eye = head + side * facing * 5.2 + up * 0.4
-	draw_circle(eye, 1.25, INK)
-	draw_circle(eye + side * facing * 0.35 + up * 0.35, 0.35, CREAM)
-	var mouth = head + side * facing * 6.0 - up * 5.2
-	draw_line(mouth - side * 1.4, mouth + side * 1.4, skin.darkened(0.42), 1.2, true)
+	outlined_poly(hair_points, hair, INK, 1.5)
 
 func draw_motion_streaks(p, origin: Vector2, team_color: Color) -> void:
 	var speed = absf(p.velocity.x)
@@ -298,7 +293,77 @@ func draw_motion_streaks(p, origin: Vector2, team_color: Color) -> void:
 		var to = -0.2 if p.facing > 0 else -2.95
 		draw_arc(origin + Vector2(0, -78), 61, from, lerpf(from, to, sweep), 20, Color(team_color, 0.18 + 0.28 * (1 - sweep)), 5, true)
 
+func athlete_pose(p) -> String:
+	if p.dive_timer > 0:
+		return "dive"
+	if p.swing_elapsed >= 0:
+		return "windup" if p.swing_elapsed < 0.055 else "spike"
+	if p.blocking or p.setting:
+		return "block"
+	if p.serve_pose in ["aim", "windup", "released"]:
+		return "windup"
+	if p.pos.y > 1:
+		return "jump"
+	if p.receiving:
+		return "receive"
+	if absf(p.velocity.x) > 45:
+		return "run"
+	return "crouch"
+
+func athlete_texture(team: int, pose: String) -> Texture2D:
+	var key = "%d_%s" % [team, pose]
+	if not athlete_textures.has(key):
+		var side = "north" if team == 0 else "south"
+		athlete_textures[key] = load("res://assets/art/athletes/%s_%s.png" % [side, pose])
+	return athlete_textures[key]
+
 func draw_player(p) -> void:
+	var origin = Vector2(p.pos.x, -p.pos.y)
+	var pose = athlete_pose(p)
+	var texture = athlete_texture(p.team, pose)
+	var setup = {
+		"receive": Vector2(0.37, 123),
+		"run": Vector2(0.35, 220),
+		"crouch": Vector2(0.39, 140),
+		"jump": Vector2(0.40, 140),
+		"windup": Vector2(0.36, 150),
+		"spike": Vector2(0.40, 240),
+		"block": Vector2(0.35, 112),
+		"dive": Vector2(0.39, 348),
+	}[pose]
+	var scale = setup.x * p.config.height / (120.0 if p.role == "MB" else 112.0)
+	var pivot_x = setup.y
+	var bob = 0.0
+	var tilt = 0.0
+	if pose == "run":
+		bob = -absf(sin(p.run_clock)) * 4.0
+		tilt = sin(p.run_clock) * 0.035 * p.facing
+	elif pose == "crouch":
+		bob = -sin(clock * 2.4 + p.id) * 0.8
+	draw_motion_streaks(p, origin, BLUE if p.team == 0 else ORANGE)
+	draw_set_transform(origin + Vector2(0, bob), tilt, Vector2(scale * p.facing, scale))
+	draw_texture(texture, Vector2(-pivot_x, -texture.get_height()))
+	draw_set_transform(Vector2.ZERO, 0, Vector2.ONE)
+
+	# Keep gameplay identity separate from the illustration so every pose stays
+	# clean and the labels remain legible at any camera zoom.
+	var label_at = origin + Vector2(0, -p.config.height - 55)
+	if p.id == game.human_id:
+		if p.swing_elapsed < 0:
+			caption(label_at + Vector2(0, -10), "YOU", 16, CREAM, true)
+			draw_colored_polygon(PackedVector2Array([label_at + Vector2(-7, -2), label_at + Vector2(7, -2), label_at + Vector2(0, 6)]), BLUE)
+	else:
+		var tag = Rect2(origin.x - 18, origin.y + 24, 36, 18)
+		draw_style_box(seat_style(Color(INK, 0.72)), tag)
+		caption(origin + Vector2(0, 37), p.role, 11, Color(CREAM, 0.9), true)
+	if p.swing_connected and p.swing_elapsed >= 0.12 and p.swing_elapsed < 0.23:
+		var alpha = (0.23 - p.swing_elapsed) / 0.11
+		var burst = Vector2(p.contact_center("spike").x, -p.contact_center("spike").y)
+		for i in range(5):
+			var direction = Vector2.from_angle(-1.7 + i * 0.27) * Vector2(p.facing, 1)
+			draw_line(burst - direction * 6, burst - direction * (18 + i * 3), Color(CREAM, alpha * 0.75), 2.4, true)
+
+func draw_procedural_player(p) -> void:
 	var origin = Vector2(p.pos.x, -p.pos.y)
 	var f = p.facing
 	var team_color = BLUE if p.team == 0 else ORANGE
@@ -330,7 +395,7 @@ func draw_player(p) -> void:
 	draw_arm(back_shoulder, joints.other_elbow, joints.other_hand, skin, team_color, true)
 	# A longer shoulder line and narrow waist match the lean volleyball physique
 	# in the reference while preserving every gameplay contact joint.
-	outlined_poly(torso_shape(shoulder, hip, 20.5, 12.0), team_color, INK, 2.5)
+	outlined_poly(torso_shape(shoulder, hip, 18.5, 10.5), team_color, INK, 1.7)
 	draw_line(shoulder - body_across * 13, shoulder + body_axis * 10 - body_across * 10, trim, 4, true)
 	draw_line(shoulder + body_across * 13, shoulder + body_axis * 10 + body_across * 10, trim, 4, true)
 	var shorts = PackedVector2Array([
@@ -340,8 +405,8 @@ func draw_player(p) -> void:
 		hip + body_axis * 5,
 		hip - body_across * 10 + body_axis * 11
 	])
-	outlined_poly(shorts, Color("12283a"), INK, 2.4)
-	draw_line(shoulder + body_axis * 7, hip - body_axis * 5, Color(team_dark, 0.65), 3, true)
+	outlined_poly(shorts, Color("12283a"), INK, 1.7)
+	draw_line(shoulder + body_axis * 7, hip - body_axis * 5, Color(team_dark, 0.55), 2, true)
 	var neck_base = shoulder - body_axis * 2.5
 	var neck_top = head + body_axis * 10.5
 	tapered_segment(neck_base, neck_top, 4.8, 4.1, skin.darkened(0.03), 1.8)
