@@ -4,10 +4,12 @@ These recordings are dedicated to the public domain under [CC0 1.0](https://crea
 
 | Original recording | Credited creator | Source | Used for |
 | --- | --- | --- | --- |
-| 09_Volleyball outdoor hit-2.wav | 16HPanskaResatko_Matej | https://freesound.org/people/16HPanskaResatko_Matej/sounds/497968/ | Ball strikes |
-| Volleyball.wav | 13FPanska_Marval_Lukas | https://freesound.org/people/13FPanska_Marval_Lukas/sounds/379337/ | Strikes, soft contacts, floor |
-| Gnashing basketball, sound 938 | ThibaudVaerman (recording credit on BigSoundBank) | https://bigsoundbank.com/gnashing-basketball-s0938.html | Indoor shoe squeaks, filtered footfalls, landings, slide |
-| Crowd Oooh.wav | deleted_user_2104797 | https://freesound.org/people/deleted_user_2104797/sounds/324890/ | Serve anticipation vowel loop |
-| Crowd aah.wav | deleted_user_2104797 | https://freesound.org/people/deleted_user_2104797/sounds/324896/ | Serve-hit crowd reaction |
+| Volleyball spike | Luisa_Sanchez | https://freesound.org/people/Luisa_Sanchez/sounds/813420/ | Spike, serve, block, receive, set, floor, and landing contact family |
+| Fast whoosh, bamboo swoosh through air, version 2 | zapsplat.com | https://freesound.org/people/zapsplat.com/sounds/719637/ | Air-swing whoosh |
+| Gnashing basketball, sound 938 | ThibaudVaerman (recording credit on BigSoundBank) | https://bigsoundbank.com/gnashing-basketball-s0938.html | Indoor shoe squeaks and slide |
+| Crowd Oooh.wav | deleted_user_2104797 | https://freesound.org/people/deleted_user_2104797/sounds/324890/ | Quiet serve-anticipation vowel loop |
+| Crowd aah.wav | deleted_user_2104797 | https://freesound.org/people/deleted_user_2104797/sounds/324896/ | Quiet serve-hit crowd reaction |
 
-The bundled WAV files are edited excerpts of the public preview recordings (Freesound) and original WAV (BigSoundBank). Changes: mono conversion, trimming, filtering, gain normalization, fades, a short room reflection tail, and a crossfaded crowd loop. The processing and exact excerpt timings are reproducible in `tools/prepare_audio.py`. Processed clips also remain CC0. The crowd is a generic wordless reaction, not a Japanese chant recording.
+The bundled WAV files are edited excerpts of public preview recordings (Freesound) and an original WAV (BigSoundBank). Changes include mono conversion, precise trimming, zero-phase filtering, soft compression, gain staging, fades, runtime pitch layering, and a crossfaded crowd loop. `tools/prepare_audio.py` records every source URL, excerpt, and processing step. Processed clips remain CC0.
+
+Ball sounds now come from one clean, isolated volleyball-spike recording so contact character stays consistent. A spike layers the full palm impact with a quiet low body; a block uses a shorter, lower pair; passes and sets use progressively softer filtered contacts. Regular AI footsteps are intentionally omitted from most frames so ball contact stays at the front of the mix. The crowd is a generic wordless reaction and is mixed well below the court.

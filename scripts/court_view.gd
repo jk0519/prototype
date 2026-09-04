@@ -66,9 +66,9 @@ func _draw() -> void:
 			draw_circle(at, 4 + 5 * (1 - item.age / 0.20), Color(CREAM, alpha))
 	var ball_screen = Vector2(game.ball.x, -game.ball.y)
 	var screen_velocity = Vector2(game.ball_velocity.x, -game.ball_velocity.y)
-	if screen_velocity.length() > 720 and game.phase == "rally":
+	if screen_velocity.length() > 620 and game.phase == "rally":
 		var back = -screen_velocity.normalized()
-		var length = clampf(screen_velocity.length() * 0.075, 50, 130)
+		var length = clampf(screen_velocity.length() * 0.08, 55, 150)
 		for i in range(5):
 			var offset = back.orthogonal() * (i - 2) * 4
 			draw_line(ball_screen + back * 14 + offset, ball_screen + back * (length - abs(i - 2) * 11) + offset, Color(CREAM, 0.34 - abs(i - 2) * 0.045), 2.5, true)

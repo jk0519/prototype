@@ -4,7 +4,7 @@ extends RefCounted
 const Athlete = preload("res://scripts/athlete.gd")
 const AI = preload("res://scripts/ai_controller.gd")
 const BALL_RADIUS: float = 11.0
-const BALL_GRAVITY: float = 1000.0
+const BALL_GRAVITY: float = 1500.0
 const NET_X: float = 1000.0
 const NET_HEIGHT: float = 207.0
 const COURT_LEFT: float = 180.0
@@ -151,7 +151,7 @@ func step(dt: float, human_intent: Dictionary = {}, all_ai: bool = false) -> voi
 	net_lock = maxf(0, net_lock - dt)
 	if phase == "point":
 		step_athletes(dt, [{}, {}, {}, {}, {}, {}])
-		if phase_time >= 2.2: prepare_serve()
+		if phase_time >= 0.95: prepare_serve()
 		return
 	var intents = ai.intentions(self, all_ai)
 	if not all_ai: intents[human_id] = human_intent
@@ -288,7 +288,7 @@ func serve(p) -> void:
 	ball = p.contact_center("serve") + Vector2(p.facing * BALL_RADIUS, 0)
 	var target = 1580.0 + rng.randf_range(-120, 120) if p.team == 0 else 420.0 + rng.randf_range(-120, 120)
 	var power = clampf((ball.y - 210) / 110.0, 0, 1)
-	var flight = maxf(1.0, absf(target - ball.x) / lerpf(1050, 1320, power))
+	var flight = maxf(0.60, absf(target - ball.x) / lerpf(1750, 2200, power))
 	ball_velocity = arc_to(Vector2(target, 75), flight)
 	rally_contacts += 1
 	emit_event("serve", ball, p.id)
@@ -308,12 +308,12 @@ func contact(p, action: String) -> void:
 		return
 	last_team = p.team
 	last_player = p.id
-	contact_lock = 0.23
+	contact_lock = 0.13
 	p.contact_flash = 0.18
 	p.swing_timer = 0
 	match action:
 		"block":
-			ball_velocity = Vector2(p.facing * maxf(440, absf(ball_velocity.x) * 0.78), -170)
+			ball_velocity = Vector2(p.facing * maxf(1050, absf(ball_velocity.x) * 0.98), -380)
 		"spike":
 			p.confirm_hit(ball - Vector2(p.facing * BALL_RADIUS, 0))
 			ball = p.contact_center("spike") + Vector2(p.facing * BALL_RADIUS, 0)
@@ -321,7 +321,7 @@ func contact(p, action: String) -> void:
 			if p.id == human_id:
 				depth = 605.0 - p.last_move * p.facing * 125.0
 			var target = NET_X + p.facing * depth
-			var flight = maxf(0.52, absf(target - ball.x) / p.config.spike_speed)
+			var flight = maxf(0.30, absf(target - ball.x) / p.config.spike_speed)
 			ball_velocity = arc_to(Vector2(target, BALL_RADIUS), flight)
 		"set":
 			set_ball(p.team)
@@ -335,21 +335,21 @@ func contact(p, action: String) -> void:
 				var recovery_time = setter.dive_timer + absf(target.x - recovery_x) / setter.config.run_speed + 0.2
 				if setter.dive_timer > 0:
 					recovery_time += 2.0 * absf(setter.velocity.x) / setter.config.acceleration
-				var flight = maxf(0.95, maxf(recovery_time, absf(target.x - ball.x) / 410.0))
+				var flight = maxf(0.62, maxf(recovery_time, absf(target.x - ball.x) / 650.0))
 				ball_velocity = arc_to(target, flight)
 			elif touches == 2:
 				set_ball(p.team)
 				action = "set"
 			else:
 				var target = Vector2(1510 if p.team == 0 else 490, 70)
-				ball_velocity = arc_to(target, maxf(1.35, absf(target.x - ball.x) / 660.0))
+				ball_velocity = arc_to(target, maxf(0.82, absf(target.x - ball.x) / 1050.0))
 				action = "free"
 	last_action = action
 	rally_contacts += 1
 	emit_event(action, ball, p.id)
 
 func set_ball(side: int) -> void:
-	var apex = maxf(390.0, ball.y + 60)
+	var apex = maxf(370.0, ball.y + 60)
 	var vy = sqrt(2 * BALL_GRAVITY * (apex - ball.y))
 	var flight = vy / BALL_GRAVITY + sqrt(2 * (apex - 300.0) / BALL_GRAVITY)
 	ball_velocity = Vector2((attack_x(side) - ball.x) / flight, vy)

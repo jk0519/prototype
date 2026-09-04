@@ -82,6 +82,7 @@ func begin_swing() -> void:
 		swing_elapsed = 0
 		swing_cooldown = SWING_END + 0.04
 		swing_connected = false
+		motion_events.append("swing")
 
 func confirm_hit(contact_position: Vector2 = Vector2.INF) -> void:
 	impact_hand = Vector2(43, config.reach)

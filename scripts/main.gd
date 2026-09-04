@@ -121,13 +121,13 @@ func _physics_process(dt: float) -> void:
 		court.add_event(event)
 		sound.play(event)
 		if event.kind in ["spike", "serve"]:
-			shake = 5.5 if effects_on else 0.0
-			impact_hold = 0.045 if effects_on else 0.0
-			impact_zoom = 0.055 if effects_on else 0.0
+			shake = 10.0 if effects_on else 0.0
+			impact_hold = 0.060 if effects_on else 0.0
+			impact_zoom = 0.110 if effects_on else 0.0
 		elif event.kind == "block":
-			shake = 3.5 if effects_on else 0.0
-			impact_hold = 0.025 if effects_on else 0.0
-			impact_zoom = 0.03 if effects_on else 0.0
+			shake = 8.0 if effects_on else 0.0
+			impact_hold = 0.045 if effects_on else 0.0
+			impact_zoom = 0.085 if effects_on else 0.0
 	sound.update(game, dt)
 	if game.phase == "finished":
 		show_result()
@@ -163,7 +163,7 @@ func update_camera(dt: float) -> void:
 	var target_zoom = minf(viewport_size.x / span, viewport_size.y * 0.57 / top)
 	var target_x = clampf((lo + hi) * 0.5, 400, 1560)
 	if mode == "playing" and game.phase == "rally":
-		target_x += clampf(game.ball_velocity.x * 0.045, -75, 75)
+		target_x += clampf(game.ball_velocity.x * 0.05, -95, 95)
 	if mode == "title":
 		target_zoom = minf(viewport_size.x / 2120, viewport_size.y / 920)
 		target_x = 1000
@@ -171,12 +171,12 @@ func update_camera(dt: float) -> void:
 	var target_y = -viewport_size.y * 0.26 / target_zoom
 	if mode == "playing" and game.phase == "rally":
 		target_y -= clampf(game.ball_velocity.y * 0.035, -38, 38)
-	var tracking_rate = 5.2 + clampf(game.ball_velocity.length() / 260.0, 0, 6.0) if mode == "playing" else 4.2
+	var tracking_rate = 5.5 + clampf(game.ball_velocity.length() / 230.0, 0, 7.0) if mode == "playing" else 4.2
 	var speed = 1.0 - exp(-dt * tracking_rate)
 	camera.zoom = camera.zoom.lerp(Vector2.ONE * target_zoom, speed)
 	camera.position = camera.position.lerp(Vector2(target_x, target_y), speed)
 	shake = maxf(0, shake - dt * 28)
-	impact_zoom = maxf(0, impact_zoom - dt * 0.55)
+	impact_zoom = maxf(0, impact_zoom - dt * 0.8)
 	camera.offset = Vector2(sin(run_elapsed * 105), cos(run_elapsed * 90)) * shake
 
 func _input(event: InputEvent) -> void:
@@ -290,7 +290,7 @@ func add_menu_button(label: String, action: Callable, primary: bool = false) -> 
 func show_title() -> void:
 	mode = "title"
 	clear_menu()
-	add_label("COURT 01  /  KINETIC BUILD", 11, Color("91b7c9"))
+	add_label("COURT 01  /  IMPACT BUILD", 11, Color("91b7c9"))
 	add_label("SIDEOUT", 50)
 	add_label("Toss. Approach. Jump. Connect.", 17, Color("b6cbd3"))
 	add_label("You play wing spiker. Your setter and blocker play\nautomatically. Beat the opposing trio to 15, win by 2.", 13, Color("8faaba"))
@@ -427,8 +427,15 @@ func load_settings() -> void:
 		var code = settings.get_value("keys", action, DEFAULT_KEYS[action])
 		if typeof(code) == TYPE_INT and code > 0:
 			keys[action] = code
-	sound.court_volume = clampf(settings.get_value("audio", "court_volume", 0.8), 0, 1)
-	sound.crowd_volume = clampf(settings.get_value("audio", "crowd_volume", 0.55), 0, 1)
+	var mix_version = int(settings.get_value("audio", "mix_version", 1))
+	if mix_version < 2:
+		# Version 2 replaces the old noisy contacts and moves the crowd behind
+		# the ball. Do not carry the obsolete balance into the new mix.
+		sound.court_volume = 0.9
+		sound.crowd_volume = 0.22
+	else:
+		sound.court_volume = clampf(settings.get_value("audio", "court_volume", 0.9), 0, 1)
+		sound.crowd_volume = clampf(settings.get_value("audio", "crowd_volume", 0.22), 0, 1)
 	sound_on = settings.get_value("game", "sound", true)
 	effects_on = settings.get_value("game", "effects", true)
 	guide_on = settings.get_value("game", "guide", true)
@@ -441,6 +448,7 @@ func save_settings() -> void:
 		settings.set_value("keys", action, keys[action])
 	settings.set_value("audio", "court_volume", sound.court_volume)
 	settings.set_value("audio", "crowd_volume", sound.crowd_volume)
+	settings.set_value("audio", "mix_version", 2)
 	settings.set_value("game", "sound", sound_on)
 	settings.set_value("game", "effects", effects_on)
 	settings.set_value("game", "guide", guide_on)

@@ -51,6 +51,17 @@ func run() -> void:
 	diver.dive_timer = 0.3
 	diver.velocity = Vector2(760, 0)
 	await capture("dive")
+	diver.reset(diver.home_x)
+	var blocker = main.game.players[2]
+	blocker.reset(940)
+	blocker.pos.y = 150
+	blocker.blocking = true
+	main.game.ball = blocker.contact_center("block") + Vector2(12, 2)
+	main.game.ball_velocity = Vector2(1150, -380)
+	main.court.effects.clear()
+	main.court.trail.clear()
+	main.court.add_event({"kind": "block", "position": main.game.ball, "player": blocker.id})
+	await capture("block")
 	main.show_settings()
 	for i in range(5): await process_frame
 	await capture("settings")

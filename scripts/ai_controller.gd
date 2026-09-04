@@ -10,13 +10,16 @@ func intentions(game, all_ai: bool) -> Array:
 		for p in game.players: result[p.id] = {}
 		var server = game.players[game.server_id]
 		if game.phase == "serve_ready":
-			result[server.id] = {"toss": game.phase_time > 0.85}
+			result[server.id] = {"toss": game.phase_time > 0.55}
 		elif game.phase == "serve_aim":
-			result[server.id] = {"toss": game.phase_time < 0.65}
+			result[server.id] = {"toss": game.phase_time < 0.42}
 		elif game.phase == "serve_toss":
 			var t = game.time_to_height(300)
 			var target = game.ball.x + game.ball_velocity.x * t - server.facing * 38
-			result[server.id] = {"move": toward(server, target), "jump": server.pos.y <= 0.01 and t < 0.59, "swing": should_swing(game, server)}
+			# The setter has a lower jump arc, so delaying its plant keeps its hand
+			# aligned with the descending toss. Every role still serves physically.
+			var jump_lead = 0.54 if server.role == "SET" else 0.59
+			result[server.id] = {"move": toward(server, target), "jump": server.pos.y <= 0.01 and t < jump_lead, "swing": should_swing(game, server)}
 		return result
 	if game.phase != "rally":
 		return result
@@ -85,7 +88,7 @@ func toward(player, target_x: float) -> float:
 
 func should_swing(game, player) -> bool:
 	if player.pos.y < 55 or player.swing_cooldown > 0: return false
-	var anticipation = 0.075
+	var anticipation = 0.04
 	var future_ball = game.ball + game.ball_velocity * anticipation - Vector2(0, 0.5 * game.BALL_GRAVITY * anticipation * anticipation)
 	var future_hand = player.pos + player.velocity * anticipation + Vector2(player.facing * 28, player.config.reach - 0.5 * player.config.gravity * anticipation * anticipation)
-	return future_ball.distance_to(future_hand) < 76
+	return future_ball.distance_to(future_hand) < 64

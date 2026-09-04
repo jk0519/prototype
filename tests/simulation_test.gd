@@ -68,7 +68,7 @@ func check_human_control() -> void:
 	for i in range(120):
 		athlete.step(1.0 / 120.0, {"move": 1.0})
 		steps += athlete.motion_events.count("step")
-	expect(steps >= 4 and steps <= 6, "Footsteps follow distance travelled")
+	expect(steps >= 6 and steps <= 8, "Footsteps follow distance travelled")
 	athlete.step(1.0 / 120.0, {"jump": true})
 	expect(athlete.jump_prepare > 0 and athlete.pos.y == 0, "Jump begins with a grounded foot plant")
 	for i in range(20): athlete.step(1.0 / 120.0, {})
@@ -126,6 +126,25 @@ func check_rules() -> void:
 	game.contact_lock = 0
 	game.contact(game.players[1], "receive")
 	expect(game.point_reason == "FOUR TOUCHES", "Fourth team touch is a fault")
+	var impact_game = MatchModel.new(5)
+	impact_game.phase = "rally"
+	impact_game.last_team = 0
+	impact_game.last_player = 1
+	impact_game.last_action = "set"
+	impact_game.touches = 2
+	impact_game.players[0].pos.y = 190
+	impact_game.ball = Vector2(790, 315)
+	impact_game.contact(impact_game.players[0], "spike")
+	expect(impact_game.ball_velocity.x > 1800 and impact_game.ball_velocity.length() > 1850, "Spike leaves the hand at decisive attack speed")
+	impact_game = MatchModel.new(5)
+	impact_game.phase = "rally"
+	impact_game.last_team = 1
+	impact_game.last_player = 3
+	impact_game.last_action = "spike"
+	impact_game.touches = 3
+	impact_game.ball_velocity = Vector2(-1200, -180)
+	impact_game.contact(impact_game.players[2], "block")
+	expect(impact_game.ball_velocity.x > 1150 and impact_game.ball_velocity.y <= -370, "Block sharply redirects the incoming spike")
 
 func check_match(seed_value: int) -> void:
 	var game = MatchModel.new(seed_value)
