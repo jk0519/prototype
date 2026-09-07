@@ -48,7 +48,8 @@ func run() -> void:
 	main.game.phase = "rally"
 	var diver = main.game.players[0]
 	diver.reset(500)
-	diver.dive_timer = 0.3
+	diver.dive_timer = 0.18
+	diver.dive_elapsed = 0.14
 	diver.velocity = Vector2(760, 0)
 	await capture("dive")
 	diver.reset(diver.home_x)
@@ -56,6 +57,7 @@ func run() -> void:
 	setter.reset(560)
 	setter.pos.y = 145
 	setter.setting = true
+	setter.set_elapsed = 0.18
 	main.game.ball = setter.contact_center("set") + Vector2(0, 8)
 	main.court.effects.clear()
 	main.court.trail.clear()
@@ -66,6 +68,7 @@ func run() -> void:
 	blocker.reset(940)
 	blocker.pos.y = 150
 	blocker.blocking = true
+	blocker.block_elapsed = 0.20
 	main.game.ball = blocker.contact_center("block") + Vector2(12, 2)
 	main.game.ball_velocity = Vector2(1150, -380)
 	main.court.effects.clear()

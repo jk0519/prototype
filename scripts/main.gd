@@ -30,6 +30,8 @@ var shake: float = 0.0
 var impact_hold: float = 0.0
 var impact_zoom: float = 0.0
 var impact_tilt: float = 0.0
+var pending_jump: bool = false
+var pending_dive: bool = false
 var autoplay: bool = false
 var capture_path: String = ""
 var capture_time: float = 8.4
@@ -105,19 +107,25 @@ func key_label(code: int) -> String:
 func _physics_process(dt: float) -> void:
 	if mode != "playing":
 		return
+	# Input edges keep arriving during impact freeze. Retain taps until the
+	# first simulated frame, even when the key was released during the hold.
+	pending_jump = pending_jump or Input.is_action_just_pressed("jump")
+	pending_dive = pending_dive or Input.is_action_just_pressed("dive")
 	if impact_hold > 0:
 		impact_hold = maxf(0, impact_hold - dt)
 		sound.update(game, dt)
 		return
 	var intent = {
 		"move": Input.get_axis("left", "right"),
-		"jump": Input.is_action_just_pressed("jump"),
+		"jump": pending_jump,
 		"receive": Input.is_action_pressed("receive"),
 		"block": Input.is_action_pressed("block"),
 		"toss": Input.is_action_pressed("block"),
 		"aim_height": Input.get_axis("toss_lower", "toss_raise"),
-		"dive": Input.is_action_just_pressed("dive")
+		"dive": pending_dive
 	}
+	pending_jump = false
+	pending_dive = false
 	sound.set_active(true)
 	game.step(dt, intent, autoplay)
 	for event in game.events:
@@ -193,6 +201,11 @@ func update_camera(dt: float) -> void:
 	camera.offset = Vector2(sin(run_elapsed * 137), cos(run_elapsed * 111)) * shake
 
 func _input(event: InputEvent) -> void:
+	# Event capture also preserves a complete press/release between physics
+	# ticks. Polling above supports programmatic actions and keyboard holds.
+	if mode == "playing":
+		if event.is_action_pressed("jump"): pending_jump = true
+		if event.is_action_pressed("dive"): pending_dive = true
 	if not event is InputEventKey or not event.pressed or event.echo:
 		return
 	if not rebind_action.is_empty():
@@ -316,6 +329,8 @@ func show_title() -> void:
 
 func start_match() -> void:
 	sound.stop_all()
+	pending_jump = false
+	pending_dive = false
 	impact_hold = 0
 	impact_zoom = 0
 	impact_tilt = 0
@@ -329,6 +344,8 @@ func start_match() -> void:
 
 func pause_match() -> void:
 	if mode != "playing": return
+	pending_jump = false
+	pending_dive = false
 	mode = "paused"
 	sound.set_active(false)
 	clear_menu()

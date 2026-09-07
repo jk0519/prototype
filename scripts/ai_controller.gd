@@ -46,7 +46,10 @@ func intentions(game, all_ai: bool) -> Array:
 			var t = game.time_to_height(contact_height)
 			var x = game.ball.x + game.ball_velocity.x * t
 			var set_intent = {"move": toward(setter, x), "set": true}
-			if jump_set and setter.pos.y <= 0.01 and setter.jump_prepare <= 0 and t < 0.50:
+			# Finish getting under the pass before committing to the jump. A setter
+			# still returning from a dive must keep the grounded fallback available.
+			var close_to_pass = absf(x - setter.pos.x) < setter.config.run_speed * 0.22
+			if jump_set and setter.pos.y <= 0.01 and setter.jump_prepare <= 0 and setter.dive_timer <= 0 and setter.dive_recovery <= 0 and close_to_pass and t > 0.14 and t < 0.50:
 				set_intent["jump"] = true
 			result[setter_id] = set_intent
 			# Give the wing an approach while the pass travels toward the setter.
@@ -90,9 +93,15 @@ func intentions(game, all_ai: bool) -> Array:
 			var t = game.time_to_height(365)
 			var x = game.ball.x + game.ball_velocity.x * t
 			if absf(x - 1000.0) < 330:
-				result[middle.id] = {"move": toward(middle, 947 if side == 0 else 1053), "block": t < 0.56 + game.ai_jump_error[middle.id]}
+				# The attacking hand contacts the descending set before the old
+				# 365-height estimate, then the spike crosses the net quickly. Plant
+				# later so the real raised palms intercept on ascent; jumping with
+				# the hitter left them 85–140 units above the incoming ball.
+				result[middle.id] = {"move": toward(middle, 947 if side == 0 else 1053), "block": t < 0.29 + game.ai_jump_error[middle.id]}
 		elif middle.pos.y > 0 and middle.blocking:
-			result[middle.id]["block"] = true
+			# Finish the committed block over the net instead of starting a retreat
+			# to home the instant the opponent strikes the ball.
+			result[middle.id] = {"move": toward(middle, 947 if side == 0 else 1053), "block": true}
 	return result
 
 func toward(player, target_x: float) -> float:

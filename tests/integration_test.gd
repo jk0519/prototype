@@ -29,6 +29,42 @@ func escape() -> void:
 	event.pressed = false
 	Input.parse_input_event(event)
 
+func key_edge(action: String, pressed: bool) -> void:
+	var event = InputEventKey.new()
+	event.keycode = main.keys[action]
+	event.physical_keycode = main.keys[action]
+	event.pressed = pressed
+	Input.parse_input_event(event)
+
+func check_hit_stop_buffer() -> void:
+	for action in ["jump", "dive"]:
+		main.start_match()
+		main.game.phase = "rally"
+		main.game.players[0].reset(415)
+		main.game.ball = Vector2(1500, 1800)
+		main.game.ball_velocity = Vector2.ZERO
+		main.impact_hold = 0.10
+		await frames(1)
+		# Complete both key edges before another simulation tick. This is the
+		# common quick tap that was lost entirely during the impact freeze.
+		key_edge(action, true)
+		key_edge(action, false)
+		await frames(2)
+		var player = main.game.players[0]
+		expect(player.pos.y == 0 and player.dive_timer == 0, "%s waits for impact freeze to finish" % action)
+		await frames(24)
+		expect(player.pos.y > 0 if action == "jump" else player.dive_timer > 0, "A released %s tap survives impact freeze" % action)
+		expect(not main.pending_jump and not main.pending_dive, "Buffered %s is consumed once" % action)
+		if action == "jump":
+			expect(player.swing_elapsed < 0, "A buffered jump does not repeat as an air swing")
+		# Pausing clears a queued game action rather than unexpectedly firing
+		# it after a menu interaction.
+		main.impact_hold = 0.10
+		key_edge(action, true)
+		key_edge(action, false)
+		main.pause_match()
+		expect(not main.pending_jump and not main.pending_dive, "Pause clears queued %s" % action)
+
 func run() -> void:
 	main = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
@@ -114,8 +150,9 @@ func run() -> void:
 	expect(main.mode == "result", "Winning point opens the result screen")
 	main.start_match()
 	expect(main.mode == "playing" and game.score == [0, 0] and game.phase == "serve_ready", "Rematch resets the score and serving state")
+	await check_hit_stop_buffer()
 	if failures.is_empty():
-		print("PASS: scene launch, input, serve, movement, pause, human receive + AI set, result and rematch")
+		print("PASS: scene launch, input, serve, movement, pause, receive + AI set, result, rematch and buffered hit-stop taps")
 	else:
 		for failure in failures:
 			printerr("FAIL: ", failure)

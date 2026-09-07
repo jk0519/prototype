@@ -1,31 +1,62 @@
-# Arcade impact prototype validation
+# SIDEOUT 0.13.0 validation
 
-Engine: Godot **4.7.2.stable.official.ed1daf0bf**. Build: **SIDEOUT 0.12.0**. Development host: Apple Silicon Mac.
+Engine: Godot **4.7.2.stable.official.ed1daf0bf**. Development host: Apple Silicon Mac.
 
-## Passed
+This release replaces the whole-character atlas with a shared articulated side-view pose. The earlier 0.12.0 visual sign-off is superseded: its static-pose checks did not establish that the feet moved correctly during serves or that the character construction matched the intended side viewpoint. Passing numerical pose checks is necessary, but does not establish animation quality or gameplay parity with The Spike.
 
-- Godot imports and compiles the project, recorded WAV assets, and all three automated test suites.
-- A human serve waits for input. A/D remains movement before and throughout the held X charge and throwing windup. The ball is anchored to the low displayed hand in ready and the opening raise beat, then to the visible open palm through windup; only release starts free flight. Hold duration changes forward toss distance; W/S or up/down changes vertical height. The toss follows the displayed parabola and does not automatically jump.
-- Low, medium, and high tosses work for every server role on both teams. The AI approaches, plants behind the baseline, becomes airborne, and contacts the serve through the same athlete mechanics as the human. An untouched toss is a missed serve.
-- Run footsteps follow distance instead of key-repeat time. The plant precedes takeoff; the air swing has a delayed contact window; follow-through cannot contact twice.
-- Ball-down and out scoring, duplicate-point protection, win-by-two scoring, the lowered 172-unit net and matching fast collision, fallback setter selection, and the four-touch fault pass deterministic rule checks. A normal point accepts player movement and returns to serve setup after a 0.52-second score tick without leaving the court.
-- The invisible gameplay skeleton still verifies the serve windup, spike coil, contact, follow-through, and falling recovery. Deterministic pose checks require the shoulders to load behind the hips, then cross more than 34 pixels through the hips while the head flexes more than 42 pixels through contact.
-- Centered contact in the torso-snap window must earn a perfect grade and launch above 2,200 px/s. A 1,900 px/s incoming attack must produce a forceful high-grade block rebound. Human serve/spike speed is stored as the match best.
-- A perfect jump serve launches above 3,500 px/s with more than 2,500 px/s² of added topspin acceleration. The test advances the ball to confirm that the serve dives rapidly after its initial launch. Sets reach at least 659 pixels and remove attacking spin.
-- High passes trigger a physical AI jump-set intention. Dive input launches at the configured dive speed, while AI receivers now commit to emergency saves earlier.
-- Three seeded AI matches finish with receives, oversized sets, high attacks, occasional blocks, emergency dives, and multi-contact rallies. Results: 9–15 (22-contact longest rally), 16–14 (13), and 17–19 (16).
-- The real main scene passes keyboard integration: title, six players, movement during serve charge, vertical toss adjustment and release, approach/jump/air-swing serve, reported contact quality and speed, movement, impact hold/burst, Escape pause/resume with frozen match time, human receive followed by AI set, ordinary-point continuity, final result screen, and rematch.
-- The audio lifecycle suite confirms the aim starts the crowd swell and real-gym room, toss is silent, a swing triggers its air cue, serve contact triggers one clean volleyball hit and the crowd release, and pause/mute stop sustained audio. All prepared court samples load as recorded WAV files.
-- Native 1280x800 captures cover title, toss charge and vertical meter, throwing windup, foot plant, jump, contact, follow-through, block impact, horizontal dive, airborne jump set, live point tick, next serve, and both ends of the scrolling settings panel. The high toss remains framed, hands meet the ball at strike, set, and block contact, and all controls and both volume sliders remain accessible.
-- The player renderer was checked at ready, aim, plant, jump, contact, follow-through, block, jump-set, and dive poses. The grounded visible height is roughly 45–65 pixels at normal 1280-pixel-wide play, matching the measured reference range. Team color, silhouette, and pose carry the play.
-- A fixed-step 60 FPS gameplay capture covers 841 consecutive rendered frames. A focused 481-frame serve capture additionally confirms the continuous low-hand carry, palm raise, attached windup, palm-origin release, rapid approach, compressed plant, high takeoff, distinct airborne swing poses, and hand-to-ball contact without a detached pre-serve ball.
-- macOS universal export succeeds, contains arm64 and x86_64 binaries, and passes the strict Apple code-signature check.
-- The exported app launches silently in an automated smoke run and reaches the gameplay scene.
+## Automated coverage
 
-The test command is `GODOT=/path/to/Godot tools/test.sh`. All automated launches use headless audio or `--mute`, so they do not play unexpected sound through the computer.
+| Suite | What it checks |
+| --- | --- |
+| `tests/simulation_test.gd` | Serve flow, toss options, role behavior, ball trajectories, scoring/faults, contact quality, AI rallies, and continuous point-to-next-serve flow |
+| `tests/integration_test.gd` | Actual main-scene keyboard controls, serving, contact feedback, pause/resume, rally flow, result/rematch, and input during impact holds |
+| `tests/contact_regression.gd` | Consistent grounded serve boundaries and immediate contacts by another athlete despite the previous hitter's debounce |
+| `tests/pose_regression.gd` | Fixed limb lengths, both feet taking stance phases, planted-foot stability in either movement direction, moving carry/charge/throw, continuous throwing and striking hands, utility actions, floor recovery, and no pose jump on hit confirmation |
+| `tests/audio_test.gd` | Recorded sample loading, serve crowd/room lifecycle, action cues, and stopping sustained audio on pause/mute |
+
+The side-view pose suite samples all three roles. It exercises carry, aim, windup, and released-arm motion while running, rather than inspecting only stationary screenshots. Contact tests use the palm-centered action regions; a block has 42-unit radii on both axes, including the ball. These are assisted contact regions, not exact image outlines.
+
+## Current release results
+
+Verified on September 6, 2026:
+
+- `tools/test.sh` passed: simulation, real-scene keyboard integration, audio, contact regressions, and **4,398** pose samples.
+- Three seeded AI matches finished: seed 7 at **9–15** (19-contact longest rally, 15 blocks), seed 21 at **15–7** (17 contacts, 7 blocks), and seed 83 at **15–13** (16 contacts, 7 blocks).
+- Contact regressions cover both serving boundaries, taps during hit-stop, human receive followed by a recovering AI setter, and eight representative block trajectories that land in the opposing court.
+- Native captures covered the toss, plant, jump, contact, follow-through, dive, jump-set, block, point transition, and settings. Enlarged renderings were reviewed for seams and overlap. A **901-frame, 60 fps** recording captured manual movement during serve preparation followed by AI rallies; frame sequences sampled at six frames per second were reviewed. It includes two serves, five sets, four spikes, and two blocks.
+- The universal Mac export completed. The build script verified the ad-hoc signed app and the exact ZIP after extraction outside the cloud-backed workspace. The packaged **0.13.0** app then launched, rendered a rally screenshot successfully, and exited without runtime errors.
+
+The capture scripts keep audio silent. These checks establish the implemented mechanics and rendering paths; they do not certify the game’s appeal or exact reference-game parity.
+
+Run the checks from the repository with Godot on your path, or set `GODOT` for the project scripts. All automated launches should use dummy/headless audio or `--mute` to avoid unexpected playback.
+
+```sh
+godot --headless --path . --editor --import --quit
+godot --headless --path . --script res://tests/simulation_test.gd
+godot --headless --path . --script res://tests/integration_test.gd -- --mute
+godot --headless --path . --script res://tests/contact_regression.gd
+godot --headless --path . --script res://tests/pose_regression.gd
+godot --headless --path . --script res://tests/audio_test.gd
+```
+
+## Native visual acceptance
+
+Review the actual rendered court in motion, at its normal camera scale, for:
+
+- A narrow profile torso and head, consistent near/far limb overlap, and a limited intentional torso turn while attacking.
+- Alternating running feet while holding and throwing the serve, with each stance foot contacting the floor instead of sliding with the body.
+- A low hand-held ball during charge, a visible palm lift before release, and no detached ball or backward position jump at the phase change.
+- A readable plant, takeoff, arm load, overhead contact, follow-through, fall, and landing through complete sequences.
+- Hands near the ball at serve, spike, set, and block contact, without moving the entire athlete to make a screenshot align.
+- Dive extension and floor recovery without instantaneous knee reversal or premature jumping out of recovery.
+- Continuous ordinary-point flow, camera framing of high tosses and sets, and readable six-player scale.
+
+Still captures help inspect silhouette and contact alignment. A consecutive-frame capture or live play session is required to inspect transitions, timing, and foot motion. The original game references guide visual comparison, but no numerical test here establishes exact reproduction of its gameplay.
 
 ## Practical limits
 
-This is still an arcade prototype with one shared athlete design and an initial authored action atlas. A human playtest is needed to tune pose timing, contact-grade thresholds, movement, extreme topspin, set height, impact hold, camera acceleration, serve timing window, relative sound levels, and AI difficulty by feel. The wordless crowd recording is a generic anticipation/reaction sound and does not reproduce a recording from another game.
+This is a playable development prototype with one shared athlete design and two team palettes. It still needs human review and tuning of animation rhythm, contact timing, movement, extreme topspin, set height, impact hold, camera behavior, sound balance, and AI decisions. The shared pose removes the previous split between displayed artwork and a separate collision skeleton; it does not replace professional animation direction or broad player testing.
 
-The Mac build is ad-hoc signed and not Apple-notarized. Intel Mac, Windows, and mobile have not been run on their target hardware. The shared game simulation has no macOS-only logic, but those targets still need their own export and input checks.
+Recorded court audio remains from the existing CC0 sources. This release does not introduce new volleyball recordings or claim to resolve the user's concerns about sound by changing the character art. The wordless crowd is a generic anticipation/reaction recording. See `assets/audio/CREDITS.md` for source details.
+
+The Mac build is ad-hoc signed and not Apple-notarized. Intel Mac, Windows, and mobile have not been run on target hardware. The shared simulation has no macOS-only logic, but each target still needs export, performance, display, and input checks. Online play, touch controls, player switching, progression, and a varied roster are not implemented.

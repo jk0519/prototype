@@ -23,17 +23,17 @@ func expect(ok: bool, label: String) -> void:
 func check_human_control() -> void:
 	var game = MatchModel.new(2)
 	var x = game.players[0].pos.x
-	expect(game.ball.distance_to(game.players[0].pos + Vector2(25, 48)) < 0.01, "Ready server visibly holds the ball at the hip")
+	expect(game.ball.distance_to(game.players[0].contact_center("carry") + Vector2(0, game.BALL_RADIUS)) < 0.01, "Ready ball rests on the actual visible carrying palm")
 	for i in range(240): game.step(1.0 / 120.0)
 	expect(game.phase == "serve_ready", "Human serve waits for toss input")
 	expect(game.players[0].pos.x == x, "AI must not move the human")
 	for i in range(8): game.step(1.0 / 120.0, {"toss": true})
-	expect(game.phase == "serve_aim" and game.serve_charge == 0, "Serve begins with a deliberate ball-raise beat before charging")
-	expect(game.ball.distance_to(game.players[0].pos + Vector2(25, 48)) < 0.01, "Ball stays in the low hand during the opening raise beat")
+	expect(game.phase == "serve_aim" and game.serve_charge == 0, "Serve begins with a preparation beat before charging")
+	expect(game.ball.distance_to(game.players[0].contact_center("carry") + Vector2(0, game.BALL_RADIUS)) < 0.01, "Ball remains in the visible hand through serve preparation")
 	for i in range(120): game.step(1.0 / 120.0, {"toss": true, "aim_height": 1.0, "move": 1.0})
 	expect(game.phase == "serve_aim" and game.toss_height > 820 and game.toss_forward > 290, "Hold time charges toss distance while vertical input raises its height")
-	expect(game.players[0].pos.x > x + 300, "Human can move throughout the serve setup")
-	expect(game.ball.distance_to(game.players[0].pos + Vector2(32, 108)) < 0.01, "Charged serve keeps the ball attached to the visible tossing palm")
+	expect(game.players[0].pos.x > x + 200 and game.players[0].pos.x <= game.COURT_LEFT - 16, "Human can use the run-up area while staying behind the service line")
+	expect(game.ball.distance_to(game.players[0].contact_center("carry") + Vector2(0, game.BALL_RADIUS)) < 0.01, "Charged serve keeps the ball attached to the visible palm while moving")
 	var high_toss = game.toss_height
 	var forward_toss = game.toss_forward
 	var aimed_x = game.players[0].pos.x
@@ -42,8 +42,22 @@ func check_human_control() -> void:
 	expect(absf(game.players[0].pos.x - aimed_x) < 35, "Releasing movement stops the server independently of toss charge")
 	game.step(1.0 / 120.0)
 	expect(game.phase == "serve_windup", "Releasing toss starts the throwing motion")
-	expect(game.ball.distance_to(game.players[0].pos + Vector2(32, 108)) < 0.01, "Windup does not detach or float the ball before release")
-	for i in range(33): game.step(1.0 / 120.0)
+	var lift_start = game.ball
+	var last_held = game.ball
+	var lift_samples = 0
+	var attached_through_lift = true
+	var continuous_lift = true
+	for i in range(33):
+		game.step(1.0 / 120.0)
+		if game.phase == "serve_windup":
+			attached_through_lift = attached_through_lift and game.ball.distance_to(game.players[0].contact_center("carry") + Vector2(0, game.BALL_RADIUS)) < 0.01
+			continuous_lift = continuous_lift and game.ball.distance_to(last_held) < game.players[0].config.height * 0.09
+			last_held = game.ball
+			lift_samples += 1
+		elif game.phase == "serve_toss" and game.phase_time == 0:
+			expect(game.ball.distance_to(game.players[0].contact_center("carry") + Vector2(0, game.BALL_RADIUS)) < 0.5, "Release starts at the lifted palm without a one-frame arm reset")
+	expect(attached_through_lift and lift_samples >= 20, "The full toss lift keeps the ball on the visible palm through intermediate frames")
+	expect(continuous_lift and last_held.y > lift_start.y + game.players[0].config.height * 0.35, "The toss raises the ball continuously instead of jumping between low and high anchors")
 	expect(game.phase == "serve_toss" and game.ball_velocity.y > 0, "Ball releases upward after the windup")
 	expect(game.players[0].pos.y == 0, "Tossing does not automatically jump")
 	for i in range(500):
@@ -58,13 +72,12 @@ func check_human_control() -> void:
 	expect(game.phase == "serve_ready" and game.players[0].pos.x > x + 20, "Human can reposition before an opponent serve")
 	# Every role uses the same physical toss, approach, plant, jump and contact.
 	for server in range(6):
-		for arc in [Vector2(390, 70), Vector2(560, 210), Vector2(820, 370)]:
+		for height in [400.0, 560.0, 820.0]:
 			game = MatchModel.new(11)
 			game.serving_team = server / 3
 			game.serve_order[game.serving_team] = server % 3
 			game.prepare_serve()
-			game.toss_height = arc.x
-			game.toss_forward = arc.y
+			game.toss_height = height
 			var was_airborne = false
 			var max_height = 0.0
 			for i in range(720):
@@ -72,8 +85,8 @@ func check_human_control() -> void:
 				if game.metrics.serve > 0 or game.phase == "point": break
 				max_height = maxf(max_height, game.ball.y)
 				was_airborne = was_airborne or game.players[server].pos.y > 35
-			expect(game.metrics.serve == 1 and was_airborne, "Role %d completes physical jump serve with arc %s" % [server, arc])
-			expect(absf(max_height - arc.x) < 12, "Toss follows the displayed parabolic height")
+			expect(game.metrics.serve == 1 and was_airborne, "Role %d completes physical jump serve at height %.0f" % [server, height])
+			expect(absf(max_height - height) < 12, "Role %d toss follows its displayed height %.0f" % [server, height])
 	# Walking makes foley; standing and airborne travel do not make footsteps.
 	var athlete = game.players[0]
 	athlete.reset(400)
@@ -104,16 +117,24 @@ func check_human_control() -> void:
 	expect(athlete.dive_timer == 0 and athlete.dive_recovery > 0, "Dive transitions through a hand-planted recovery")
 	var pose_player = MatchModel.new().players[0]
 	pose_player.serve_pose = "windup"
+	pose_player.serve_pose_time = 0
+	var serve_start = pose_player.skeleton()
+	pose_player.serve_pose_time = 0.11
+	var serve_mid = pose_player.skeleton()
 	pose_player.serve_pose_time = 0.22
 	var serve_pose = pose_player.skeleton()
-	expect(serve_pose.shoulder.x - serve_pose.hip.x < -18, "Serve windup loads the torso sideways")
+	expect(serve_start.hand.y < serve_mid.hand.y and serve_mid.hand.y < serve_pose.hand.y, "The serve arm passes through a distinct middle lifting pose")
+	expect(serve_pose.shoulder.x - serve_pose.hip.x < serve_start.shoulder.x - serve_start.hip.x, "The server straightens through the toss while preserving the side-view torso")
+	expect(absf(serve_pose.shoulder.distance_to(serve_pose.hip) - serve_start.shoulder.distance_to(serve_start.hip)) < 0.01, "The tossing torso turns without changing anatomical length")
+	pose_player.serve_pose = ""
 	pose_player.pos.y = 150
 	pose_player.swing_elapsed = 0.035
 	var coil_pose = pose_player.skeleton()
 	pose_player.swing_elapsed = 0.118
 	var strike_pose = pose_player.skeleton()
-	expect(coil_pose.shoulder.x - coil_pose.hip.x < -25, "Spike begins with a backward whole-body coil")
-	expect(strike_pose.shoulder.x - strike_pose.hip.x > 34 and strike_pose.head.x - strike_pose.hip.x > 42, "Spike snaps the torso and head sideways through contact")
+	expect(coil_pose.shoulder.x < coil_pose.hip.x, "Spike starts with the shoulder behind the hip in a side-view coil")
+	expect(strike_pose.shoulder.x > strike_pose.hip.x and strike_pose.head.x > strike_pose.shoulder.x, "Spike transfers the shoulder and head forward through contact")
+	expect(absf(strike_pose.shoulder.distance_to(strike_pose.hip) - coil_pose.shoulder.distance_to(coil_pose.hip)) < 0.01, "Spike rotation preserves torso length instead of stretching the body")
 	pose_player.swing_elapsed = 0.05
 	var early_snap = pose_player.skeleton()
 	pose_player.swing_elapsed = 0.08
@@ -125,7 +146,7 @@ func check_human_control() -> void:
 	var set_start = pose_player.skeleton()
 	for i in range(22): pose_player.step(1.0 / 120.0, {"set": true})
 	var set_ready = pose_player.skeleton()
-	expect(set_ready.hand.y > set_start.hand.y + 50 and set_ready.other_hand.y > set_start.other_hand.y + 50, "Set raises both hands through a timed preparation")
+	expect(set_ready.hand.y > set_start.hand.y + pose_player.config.height * 0.35 and set_ready.other_hand.y > set_start.other_hand.y + pose_player.config.height * 0.35, "Set raises both hands through a timed preparation")
 
 func check_rules() -> void:
 	var game = MatchModel.new()
@@ -185,7 +206,7 @@ func check_rules() -> void:
 	impact_game.last_action = "set"
 	impact_game.touches = 2
 	impact_game.players[0].pos.y = 190
-	impact_game.players[0].swing_elapsed = 0.082
+	impact_game.players[0].swing_elapsed = 0.108
 	impact_game.ball = impact_game.players[0].contact_center("spike")
 	impact_game.previous_ball = impact_game.ball
 	impact_game.contact(impact_game.players[0], "spike")
@@ -197,16 +218,25 @@ func check_rules() -> void:
 	impact_game.last_player = 3
 	impact_game.last_action = "spike"
 	impact_game.touches = 3
+	var blocker = impact_game.players[2]
+	blocker.reset(947)
+	blocker.pos.y = 190
+	blocker.blocking = true
+	blocker.block_elapsed = 0.20
+	impact_game.ball = blocker.contact_center("block")
+	impact_game.previous_ball = impact_game.ball
 	impact_game.ball_velocity = Vector2(-1900, -300)
-	impact_game.contact(impact_game.players[2], "block")
-	expect(impact_game.events[-1].quality > 0.75 and impact_game.ball_velocity.x > 1850 and impact_game.ball_velocity.y < -425, "Fast spike produces a forceful high-grade block rebound")
+	impact_game.check_contacts()
+	var block_landing = impact_game.ball.x + impact_game.ball_velocity.x * impact_game.time_to_height(impact_game.BALL_RADIUS)
+	expect(impact_game.metrics.block == 1 and impact_game.events[-1].quality > 0.75 and impact_game.ball_velocity.y < -1200 and impact_game.ball_velocity.length() > 1300, "Fast spike produces a forceful downward block through the raised palms")
+	expect(block_landing > impact_game.NET_X and block_landing < impact_game.COURT_RIGHT, "A firm block lands in the attacking court instead of reflecting past the baseline")
 
 func check_arcade_mechanics() -> void:
 	var game = MatchModel.new(13)
 	var server = game.players[0]
 	game.phase = "serve_toss"
 	server.pos.y = 185
-	server.swing_elapsed = 0.082
+	server.swing_elapsed = 0.108
 	game.ball = server.contact_center("serve")
 	game.previous_ball = game.ball
 	game.serve(server)

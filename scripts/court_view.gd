@@ -10,22 +10,7 @@ const INK = Color("15283d")
 const CREAM = Color("f0f6ec")
 const BLUE = Color("4ecbff")
 const ORANGE = Color("ff9b42")
-const NORTH_ATHLETE = preload("res://assets/art/animation/wing-spiker-north.png")
-const SOUTH_ATHLETE = preload("res://assets/art/animation/wing-spiker-south.png")
-const ATLAS_COLUMNS = 8
-const ATLAS_ROWS = 4
-# The atlas cells contain transparent margins; 120 world units renders the
-# visible grounded silhouette at roughly 48-58 px in a 1280 px match view.
-const ATHLETE_DRAW_SIZE = 120.0
-const FRAME_BASELINE = 360.0 / 384.0
-const FRAME_CONTACT_PIXELS = {
-	12: Vector2(246, 5),
-	22: Vector2(244, 27),
-	26: Vector2(192, 68),
-	27: Vector2(192, 47),
-	28: Vector2(204, 30),
-	29: Vector2(204, 5),
-}
+const AthleteRenderer = preload("res://scripts/athlete_renderer.gd")
 
 func advance(dt: float) -> void:
 	clock += dt
@@ -54,7 +39,7 @@ func add_event(event: Dictionary) -> void:
 		if player_id >= 0 and player_id < game.players.size():
 			var p = game.players[player_id]
 			effect["player_position"] = p.pos
-			effect["player_frame"] = athlete_frame(p)
+			effect["player_pose"] = p.visual_pose()
 			effect["player_facing"] = p.facing
 			effect["player_team"] = p.team
 		effects.append(effect)
@@ -169,20 +154,10 @@ func draw_attack_speed_lines(effect: Dictionary, pos: Vector2, color: Color) -> 
 
 func draw_impact_afterimages() -> void:
 	for effect in effects:
-		if effect.kind not in ["serve", "spike", "block"] or effect.age > 0.20 or not effect.has("player_position"):
+		if effect.kind not in ["serve", "spike", "block"] or effect.age > 0.15 or not effect.has("player_pose"):
 			continue
-		var life = 1.0 - effect.age / 0.20
-		var texture: Texture2D = NORTH_ATHLETE if effect.player_team == 0 else SOUTH_ATHLETE
-		var team_color = BLUE if effect.player_team == 0 else ORANGE
-		var direction = signf(effect.ball_velocity.x)
-		if direction == 0: direction = effect.player_facing
-		for copy in range(2, 0, -1):
-			var origin = Vector2(effect.player_position.x, -effect.player_position.y) - Vector2(direction * copy * 13, copy * 2)
-			draw_set_transform(origin, 0.0, Vector2(effect.player_facing, 1.0))
-			var size = ATHLETE_DRAW_SIZE * (1.0 + copy * 0.018)
-			var destination = Rect2(Vector2(-size * 0.5, -size * FRAME_BASELINE), Vector2.ONE * size)
-			draw_texture_rect_region(texture, destination, athlete_region(effect.player_frame, texture), Color(team_color, life * (0.11 + copy * 0.035)))
-			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		var origin = Vector2(effect.player_position.x, -effect.player_position.y) - Vector2(effect.player_facing * 14, 0)
+		AthleteRenderer.draw_pose(self, effect.player_pose, origin, effect.player_facing, effect.player_team, 0.16 * (1.0 - effect.age / 0.15))
 
 func draw_arena() -> void:
 	draw_rect(Rect2(-2000, -2200, 6000, 3500), Color("0c1625"))
@@ -218,20 +193,16 @@ func draw_arena() -> void:
 	draw_rect(Rect2(-700, -61, 3400, 62), Color("182e43"))
 	caption(Vector2(430, -24), "N O R T H", 18, Color("7295a8"), true)
 	caption(Vector2(1570, -24), "S O U T H", 18, Color("7295a8"), true)
-	# Ground plane; the near painted edge is decorative, x boundaries are real.
-	draw_rect(Rect2(-1600, 0, 5200, 1300), Color("173749"))
-	draw_rect(Rect2(165, -3, 1670, 83), Color("d7e6d8"))
-	draw_rect(Rect2(181, 1, 1638, 71), Color("5b9c91"))
-	draw_rect(Rect2(181, 1, 817, 71), Color("61a89b"))
-	draw_rect(Rect2(1002, 1, 817, 71), Color("66a397"))
-	for x in [600, 1400]:
-		draw_line(Vector2(x, 0), Vector2(x, 75), CREAM, 4)
-	draw_line(Vector2(1000, 0), Vector2(1000, 76), Color(CREAM, 0.7), 3)
-	draw_line(Vector2(180, 1), Vector2(180, 77), CREAM, 5)
-	draw_line(Vector2(1820, 1), Vector2(1820, 77), CREAM, 5)
-	draw_line(Vector2(170, 95), Vector2(1830, 95), Color("244759"), 2)
-	caption(Vector2(235, 130), "COURT 01     /     3 vs 3", 18, Color("638899"))
-	caption(Vector2(1770, 130), "PLAY THE NEXT BALL", 18, Color("638899"), true)
+	# The floor has shallow visual depth; athletes retain a side-on action plane.
+	draw_rect(Rect2(-1600, -48, 5200, 1400), Color("173749"))
+	var corners = PackedVector2Array([Vector2(220,-60), Vector2(1780,-60), Vector2(1900,120), Vector2(100,120)])
+	draw_colored_polygon(corners, Color("609f94"))
+	draw_polyline(PackedVector2Array([corners[0],corners[1],corners[2],corners[3],corners[0]]), CREAM, 6, true)
+	for x in [600,1000,1400]:
+		var shift = (x - 1000) * 0.10
+		draw_line(Vector2(x - shift / 3.0, -60), Vector2(x + shift, 120), Color(CREAM,0.8), 3, true)
+	caption(Vector2(235, 157), "COURT 01     /     3 vs 3", 18, Color("638899"))
+	caption(Vector2(1770, 157), "PLAY THE NEXT BALL", 18, Color("638899"), true)
 
 var seat_cache: Dictionary = {}
 func seat_style(color: Color) -> StyleBoxFlat:
@@ -281,111 +252,14 @@ func draw_motion_streaks(p, origin: Vector2, team_color: Color) -> void:
 		var to = -0.2 if p.facing > 0 else -2.95
 		draw_arc(origin + Vector2(0, -58), 54, from, lerpf(from, to, sweep), 20, Color(team_color, 0.22 + 0.42 * (1 - sweep)), 6, true)
 
-func athlete_frame(p) -> int:
-	if p.dive_timer > 0:
-		return 30
-	if p.dive_recovery > 0:
-		return 31
-	var serving_action = p.id == game.server_id and (game.phase == "serve_toss" or (game.last_action == "serve" and game.last_player == p.id and p.swing_elapsed >= 0))
-	if p.serve_pose in ["ready", "aim", "windup"]:
-		if p.serve_pose == "ready": return 16
-		if p.serve_pose == "aim": return 16 if p.serve_pose_time < game.SERVE_RAISE_DURATION else 17
-		# Keep the raised tossing palm on screen until the ball actually leaves it.
-		return 17
-	if serving_action:
-		if p.swing_elapsed >= 0:
-			if p.swing_elapsed < 0.055: return 21
-			if p.swing_elapsed < 0.135: return 22
-			return 23
-		if p.jump_prepare > 0: return 19
-		if p.pos.y > 1: return 20
-		if absf(p.velocity.x) > 20: return 18
-		return 18
-	if p.swing_elapsed >= 0:
-		if p.swing_elapsed < 0.055: return 11
-		if p.swing_elapsed < 0.135: return 12
-		if p.swing_elapsed < 0.190: return 13
-		if p.swing_elapsed < 0.265: return 14
-		return 15
-	if p.blocking:
-		return 29 if p.pos.y > 35 or p.contact_flash > 0 else 28
-	if p.setting:
-		return 27 if p.contact_flash > 0 or p.set_elapsed > 0.18 else 26
-	if p.receiving:
-		return 25 if p.contact_flash > 0 else 24
-	if p.jump_prepare > 0:
-		return 8 if p.jump_prepare > 0.035 else 9
-	if p.pos.y > 1:
-		return 10 if p.velocity.y > p.config.jump_speed * 0.55 else 11
-	if p.landing_timer > 0:
-		return 15
-	if p.skid_cooldown > 0.20:
-		return 7
-	if absf(p.velocity.x) > 20:
-		var run_frames = [2, 3, 4, 5, 6, 7]
-		var phase = int(floor(fposmod(p.run_clock, TAU) / TAU * run_frames.size())) % run_frames.size()
-		return run_frames[phase]
-	return 0 if fposmod(p.animation_clock + p.id * 0.13, 0.72) < 0.42 else 1
-
-func athlete_region(frame: int, texture: Texture2D) -> Rect2:
-	var column = frame % ATLAS_COLUMNS
-	var row = frame / ATLAS_COLUMNS
-	var cell_width = texture.get_width() / float(ATLAS_COLUMNS)
-	var cell_height = texture.get_height() / float(ATLAS_ROWS)
-	return Rect2(column * cell_width, row * cell_height, cell_width, cell_height)
-
 func draw_player(p) -> void:
 	var origin = Vector2(p.pos.x, -p.pos.y)
-	var frame = athlete_frame(p)
-	var texture: Texture2D = NORTH_ATHLETE if p.team == 0 else SOUTH_ATHLETE
-	var pose_scale = Vector2.ONE
-	var pose_rotation = 0.0
-	if p.dive_timer > 0:
-		pose_scale = Vector2(1.12, 0.90)
-	elif p.jump_prepare > 0:
-		var plant = 1.0 - p.jump_prepare / 0.060
-		pose_scale = Vector2(1.0 + plant * 0.16, 1.0 - plant * 0.18)
-	elif p.swing_elapsed >= 0 and not p.swing_connected:
-		if p.swing_elapsed < 0.055:
-			pose_rotation = -p.facing * lerpf(0.04, 0.15, p.swing_elapsed / 0.055)
-			pose_scale = Vector2(0.94, 1.08)
-		else:
-			pose_rotation = p.facing * 0.10
-			pose_scale = Vector2(1.10, 0.94)
-	elif p.pos.y > 1:
-		pose_scale = Vector2(0.95, 1.07 if p.velocity.y > 0 else 1.02)
-	elif absf(p.velocity.x) > 220:
-		pose_rotation = signf(p.velocity.x) * 0.055
-		var stride = absf(sin(p.run_clock))
-		pose_scale = Vector2(1.0 + stride * 0.045, 1.0 - stride * 0.035)
 	draw_motion_streaks(p, origin, BLUE if p.team == 0 else ORANGE)
-	draw_set_transform(origin, pose_rotation, Vector2(p.facing * pose_scale.x, pose_scale.y))
-	var destination = Rect2(Vector2(-ATHLETE_DRAW_SIZE * 0.5, -ATHLETE_DRAW_SIZE * FRAME_BASELINE), Vector2.ONE * ATHLETE_DRAW_SIZE)
-	if FRAME_CONTACT_PIXELS.has(frame):
-		var art_hand = (FRAME_CONTACT_PIXELS[frame] - Vector2(192, 360)) * (ATHLETE_DRAW_SIZE / 384.0)
-		var physics_hand = Vector2.ZERO
-		if p.swing_connected:
-			physics_hand = Vector2(p.impact_hand.x, -p.impact_hand.y)
-		elif p.setting:
-			physics_hand = Vector2(0, -(p.config.height + 15))
-		elif p.blocking:
-			physics_hand = Vector2(24, -(p.config.reach + 7))
-		else:
-			var hand = p.skeleton().hand
-			physics_hand = Vector2(hand.x * p.facing, -hand.y)
-		destination.position += physics_hand - art_hand
-	draw_texture_rect_region(texture, destination, athlete_region(frame, texture))
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	if p.swing_connected and p.swing_elapsed >= 0.12 and p.swing_elapsed < 0.23:
-		var alpha = (0.23 - p.swing_elapsed) / 0.11
-		var burst = origin + Vector2(p.impact_hand.x * p.facing, -p.impact_hand.y)
-		for i in range(5):
-			var direction = Vector2.from_angle(-1.7 + i * 0.27) * Vector2(p.facing, 1)
-			draw_line(burst - direction * 6, burst - direction * (18 + i * 3), Color(CREAM, alpha * 0.75), 2.4, true)
-	var label_at = origin + Vector2(0, -ATHLETE_DRAW_SIZE * 0.96)
-	if p.id == game.human_id:
-		if p.swing_elapsed < 0:
-			draw_colored_polygon(PackedVector2Array([label_at + Vector2(-6, -4), label_at + Vector2(6, -4), label_at + Vector2(0, 4)]), BLUE)
+	AthleteRenderer.draw_pose(self, p.visual_pose(), origin, p.facing, p.team)
+	if p.id == game.human_id and p.swing_elapsed < 0:
+		var head = p.skeleton().head
+		var marker = origin + Vector2(head.x, -head.y - 18)
+		draw_colored_polygon(PackedVector2Array([marker + Vector2(-6, -4), marker + Vector2(6, -4), marker + Vector2(0, 4)]), BLUE)
 
 func draw_ball(pos: Vector2, rotation_angle: float) -> void:
 	draw_circle(pos + Vector2(1, 2), 13, Color(INK, 0.3))

@@ -33,6 +33,7 @@ var phase_time: float = 0.0
 var toss_height: float = 560.0
 var toss_forward: float = 210.0
 var serve_charge: float = 0.0
+var serve_has_taken_off: bool = false
 var time: float = 0.0
 var serving_team: int = 0
 var serve_order: Array = [0, -1]
@@ -41,7 +42,10 @@ var last_team: int = -1
 var last_player: int = -1
 var last_action: String = ""
 var touches: int = 0
+## Latest hitter's remaining debounce, exposed for diagnostics. Other athletes
+## can still touch the ball immediately, including blocks at the net.
 var contact_lock: float = 0.0
+var player_contact_locks: Array = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 var net_lock: float = 0.0
 var point_winner: int = -1
 var point_reason: String = ""
@@ -88,16 +92,18 @@ func prepare_serve() -> void:
 	last_player = -1
 	last_action = ""
 	contact_lock = 0
+	player_contact_locks.fill(0.0)
 	net_lock = 0
 	for p in players:
 		p.movement_bounds = Vector2(65, 962) if p.team == 0 else Vector2(1038, 1935)
 		p.reset(p.home_x)
 	server_id = serving_team * 3 + maxi(serve_order[serving_team], 0)
 	var server = players[server_id]
-	server.movement_bounds = Vector2(-260, 962) if serving_team == 0 else Vector2(1038, 2260)
+	server.movement_bounds = grounded_serve_bounds(server.team)
 	server.reset(-125.0 if serving_team == 0 else 2125.0)
 	server.serve_pose = "ready"
 	serve_charge = 0
+	serve_has_taken_off = false
 	toss_forward = TOSS_MIN_FORWARD
 	ball = held_ball_position()
 	previous_ball = ball
@@ -115,6 +121,11 @@ func refresh_ai_accuracy() -> void:
 
 func attack_x(side: int) -> float:
 	return 830.0 if side == 0 else 1170.0
+
+func grounded_serve_bounds(side: int) -> Vector2:
+	# One approach area from pickup through takeoff: releasing the toss must
+	# never replace a wide movement area with a smaller one under the player.
+	return Vector2(-260, COURT_LEFT - 16) if side == 0 else Vector2(COURT_RIGHT + 16, 2260)
 
 func setter_for(side: int) -> int:
 	var setter = side * 3 + 1
@@ -134,19 +145,19 @@ func ball_gravity() -> float:
 	return BALL_GRAVITY + ball_topspin
 
 func toss_origin() -> Vector2:
+	# For the guide, sample the release endpoint without changing animation state.
 	var server = players[server_id]
-	# Frame 17's open tossing palm is at (+/-32, 96) in world units. The ball
-	# center sits one radius above it, so free flight begins at that same hand.
-	return server.pos + Vector2(server.facing * 32, 108)
+	var old_pose: String = server.serve_pose
+	var old_time: float = server.serve_pose_time
+	server.serve_pose = "windup"
+	server.serve_pose_time = 0.22
+	var origin: Vector2 = server.contact_center("carry") + Vector2(0, BALL_RADIUS)
+	server.serve_pose = old_pose
+	server.serve_pose_time = old_time
+	return origin
 
 func held_ball_position() -> Vector2:
-	var server = players[server_id]
-	if phase == "serve_ready" or (phase == "serve_aim" and phase_time < SERVE_RAISE_DURATION):
-		# Frame 16 holds the ball beside the forward hip.
-		return server.pos + Vector2(server.facing * 25, 48)
-	# Frame 17 has the tossing arm extended. Lock the ball to that visible palm
-	# during charge and windup; only the release creates free ball motion.
-	return toss_origin()
+	return players[server_id].contact_center("carry") + Vector2(0, BALL_RADIUS)
 
 func toss_velocity() -> Vector2:
 	var vy = sqrt(2 * BALL_GRAVITY * (toss_height - toss_origin().y))
@@ -176,6 +187,8 @@ func step(dt: float, human_intent: Dictionary = {}, all_ai: bool = false) -> voi
 	time += dt
 	phase_time += dt
 	contact_lock = maxf(0, contact_lock - dt)
+	for i in range(player_contact_locks.size()):
+		player_contact_locks[i] = maxf(0, player_contact_locks[i] - dt)
 	net_lock = maxf(0, net_lock - dt)
 	if phase == "point":
 		# The court stays live between rallies. Players can keep running while the
@@ -189,6 +202,7 @@ func step(dt: float, human_intent: Dictionary = {}, all_ai: bool = false) -> voi
 	if not all_ai: intents[human_id] = human_intent
 	var server = players[server_id]
 	if phase in ["serve_ready", "serve_aim", "serve_windup"]:
+		server.movement_bounds = grounded_serve_bounds(server.team)
 		var input = intents[server_id]
 		if phase == "serve_ready" and phase_time > 0.3 and input.get("toss", false):
 			phase = "serve_aim"
@@ -197,7 +211,7 @@ func step(dt: float, human_intent: Dictionary = {}, all_ai: bool = false) -> voi
 			toss_height = clampf(toss_height + input.get("aim_height", 0.0) * dt * 420, TOSS_MIN_HEIGHT, TOSS_MAX_HEIGHT)
 			# The Spike's serve button controls toss distance by hold time. A/D stays
 			# movement throughout the setup so the player can choose the run-up. The
-			# first beat raises the ball from the hip before charge begins.
+			# first beat accepts the press before charge begins; release starts the lift.
 			if phase_time >= SERVE_RAISE_DURATION:
 				serve_charge = minf(1, serve_charge + dt * 0.78)
 			var charged = smoothstep(0.0, 1.0, serve_charge)
@@ -212,7 +226,7 @@ func step(dt: float, human_intent: Dictionary = {}, all_ai: bool = false) -> voi
 		step_athletes(dt, intents)
 		ball = held_ball_position()
 		previous_ball = ball
-		if phase == "serve_windup" and phase_time >= 0.12:
+		if phase == "serve_windup" and phase_time >= 0.22:
 			ball = toss_origin()
 			previous_ball = ball
 			ball_topspin = 0
@@ -220,14 +234,17 @@ func step(dt: float, human_intent: Dictionary = {}, all_ai: bool = false) -> voi
 			phase = "serve_toss"
 			phase_time = 0
 			server.serve_pose = "released"
+			server.serve_pose_time = 0
 			events.append({"kind": "toss", "position": ball, "player": server_id})
 		return
 	server.serve_pose_time = phase_time
-	if phase == "serve_toss" and server.pos.y <= 0.01:
-		server.movement_bounds = Vector2(-260, COURT_LEFT - 16) if server.team == 0 else Vector2(COURT_RIGHT + 16, 2260)
+	if phase == "serve_toss" and not serve_has_taken_off and server.pos.y <= 0.01:
+		server.movement_bounds = grounded_serve_bounds(server.team)
 	else:
 		server.movement_bounds = Vector2(-260, 962) if server.team == 0 else Vector2(1038, 2260)
 	step_athletes(dt, intents)
+	if phase == "serve_toss" and server.pos.y > 0.01:
+		serve_has_taken_off = true
 	# Four swept intervals prevent fast spikes tunnelling through the net or floor.
 	for substep in range(4):
 		if phase not in ["rally", "serve_toss"]: break
@@ -240,8 +257,7 @@ func step_ball(dt: float) -> void:
 	previous_ball = ball
 	ball_velocity.y -= ball_gravity() * dt
 	ball += ball_velocity * dt
-	if contact_lock <= 0:
-		check_contacts()
+	check_contacts()
 	if phase not in ["rally", "serve_toss"]:
 		return
 	# A solid net with a small, damped bounce. A ball that brushes the net stays live.
@@ -290,7 +306,7 @@ func strike_quality(p, action: String) -> float:
 	var horizontal = 1.0 - clampf(absf(ball.x - center.x) / radius.x, 0, 1)
 	var timing = 0.55
 	if p.swing_elapsed >= 0:
-		timing = 1.0 - clampf(absf(p.swing_elapsed - 0.082) / 0.052, 0, 1)
+		timing = 1.0 - clampf(absf(p.swing_elapsed - 0.108) / 0.042, 0, 1)
 	# The ball first crosses the outside of the swept contact ellipse, so grade
 	# horizontal hand placement separately from the swing-frame timing.
 	return clampf(0.18 + 0.82 * (timing * 0.72 + horizontal * 0.28), 0.18, 1.0)
@@ -298,16 +314,18 @@ func strike_quality(p, action: String) -> float:
 func check_contacts() -> void:
 	if phase == "serve_toss":
 		var server = players[server_id]
-		if server.pos.y > 35 and server.swing_timer > 0 and within_contact(server, "serve", Vector2(48, 44)):
+		if player_contact_locks[server.id] <= 0 and server.pos.y > 35 and server.swing_timer > 0 and within_contact(server, "serve", Vector2(48, 44)):
 			serve(server)
 		return
 	# Block contacts take priority at the net. They do not consume a team touch.
 	for p in players:
+		if player_contact_locks[p.id] > 0: continue
 		if p.blocking and p.pos.y > 35 and p.team != last_team and last_action != "serve":
-			if within_contact(p, "block", Vector2(110, 170)):
+			if within_contact(p, "block", Vector2(42, 42)):
 				contact(p, "block")
 				return
 	for p in players:
+		if player_contact_locks[p.id] > 0: continue
 		if p.swing_timer > 0 and p.pos.y > 35:
 			if within_contact(p, "spike", Vector2(50, 46)):
 				contact(p, "spike")
@@ -315,11 +333,13 @@ func check_contacts() -> void:
 	if ball_velocity.y > 75:
 		return
 	for p in players:
+		if player_contact_locks[p.id] > 0: continue
 		if p.setting and p.team == last_team and touches == 1:
 			if within_contact(p, "set", Vector2(72, 56)):
 				contact(p, "set")
 				return
 	for p in players:
+		if player_contact_locks[p.id] > 0: continue
 		if not p.receiving or p.pos.y > 30:
 			continue
 		var action = "dive" if p.dive_timer > 0 else "receive"
@@ -337,6 +357,7 @@ func serve(p) -> void:
 	last_action = "serve"
 	touches = 1
 	contact_lock = 0.18
+	player_contact_locks[p.id] = contact_lock
 	p.confirm_hit(ball - Vector2(p.facing * BALL_RADIUS, 0))
 	p.serve_pose = ""
 	ball = p.contact_center("serve") + Vector2(p.facing * BALL_RADIUS, 0)
@@ -369,6 +390,9 @@ func contact(p, action: String) -> void:
 	last_team = p.team
 	last_player = p.id
 	contact_lock = 0.10
+	# Debounce each player separately. A fast opposing block may happen in the
+	# next swept interval; it must not re-enable the original hitter's overlap.
+	player_contact_locks[p.id] = contact_lock
 	p.contact_flash = 0.18
 	p.swing_timer = 0
 	var quality = 0.62
@@ -377,7 +401,10 @@ func contact(p, action: String) -> void:
 			ball_topspin = 500.0
 			var incoming = ball_velocity.length()
 			quality = clampf((incoming - 700.0) / 1500.0, 0.25, 1.0)
-			ball_velocity = Vector2(p.facing * maxf(1200, absf(ball_velocity.x) * lerpf(1.02, 1.28, quality)), -lerpf(420, 760, quality))
+			# A firm roof drives the ball into the attacker's court. Returning the
+			# full incoming horizontal speed launched clean blocks past the baseline.
+			var rebound_x = clampf(absf(ball_velocity.x) * 0.42, 700, 1700)
+			ball_velocity = Vector2(p.facing * rebound_x, -lerpf(900, 1400, quality))
 		"spike":
 			quality = strike_quality(p, "spike")
 			p.confirm_hit(ball - Vector2(p.facing * BALL_RADIUS, 0))
@@ -400,9 +427,11 @@ func contact(p, action: String) -> void:
 				# A teammate may already be sliding when the human makes the pass.
 				# Give the pass enough height for that real movement to finish.
 				var recovery_x = setter.pos.x + setter.velocity.x * setter.dive_timer
-				var recovery_time = setter.dive_timer + absf(target.x - recovery_x) / setter.config.run_speed + 0.2
+				var recovery_time = setter.dive_timer + setter.dive_recovery + absf(target.x - recovery_x) / setter.config.run_speed + 0.2
 				if setter.dive_timer > 0:
-					recovery_time += 2.0 * absf(setter.velocity.x) / setter.config.acceleration
+					# The hand-planted recovery is a real movement lock after sliding.
+					# Include that future interval as well as braking/turnaround time.
+					recovery_time += setter.DIVE_RECOVERY + 2.0 * absf(setter.velocity.x) / setter.config.acceleration
 				var flight = maxf(0.62, maxf(recovery_time, absf(target.x - ball.x) / 650.0))
 				ball_velocity = arc_to(target, flight)
 			elif touches == 2:
