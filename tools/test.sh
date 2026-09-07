@@ -8,3 +8,5 @@ GODOT_BIN=${GODOT:-godot}
 "$GODOT_BIN" --headless --path . --script res://tests/audio_test.gd
 "$GODOT_BIN" --headless --path . --script res://tests/contact_regression.gd
 "$GODOT_BIN" --headless --path . --script res://tests/pose_regression.gd
+"$GODOT_BIN" --headless --path . --script res://tests/serve_control_regression.gd -- --mute
+"$GODOT_BIN" --headless --path . --script res://tests/shot_regression.gd

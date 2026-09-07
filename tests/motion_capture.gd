@@ -21,8 +21,8 @@ func run() -> void:
 			Input.action_release("left")
 			Input.action_release("right")
 			Input.action_release("block")
-			if time < 0.38: Input.action_press("left")
-			elif time < 1.35: Input.action_press("right")
+			if time < 0.34: Input.action_press("left")
+			elif time < 0.52: Input.action_press("right")
 			if time >= 0.34 and time < 1.12: Input.action_press("block")
 		else:
 			Input.action_release("right")

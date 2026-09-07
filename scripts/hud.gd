@@ -44,10 +44,9 @@ func _draw() -> void:
 	draw_circle(Vector2(serve_x, 59), 3.5, BLUE if game.serving_team == 0 else ORANGE)
 	box(Rect2(26, 99, 135, 32), Color(0.05, 0.10, 0.17, 0.78), 8)
 	text_at(Vector2(39, 120), "YOU  /  WING SPIKER", 10, BLUE)
-	if game.best_hit_speed > 0:
-		text_at(Vector2(31, 148), "BEST  %d km/h" % roundi(game.best_hit_speed * 0.058), 11, Color("ffe46b"))
+	draw_shot_readouts()
 	if autoplay:
-		text_at(Vector2(32, 166), "AUTOPLAY TEST", 10, ORANGE)
+		text_at(Vector2(32, 348), "AUTOPLAY TEST", 10, ORANGE)
 	if game.phase.begins_with("serve_"):
 		var own_serve = game.server_id == game.human_id and not autoplay
 		var prompt = "YOUR JUMP SERVE" if own_serve else ("TEAMMATE SERVING" if game.serving_team == 0 else "OPPONENT SERVING")
@@ -60,8 +59,9 @@ func _draw() -> void:
 					var vertical = roundi(inverse_lerp(game.TOSS_MIN_HEIGHT, game.TOSS_MAX_HEIGHT, game.toss_height) * 100)
 					var forward = roundi(inverse_lerp(game.TOSS_MIN_FORWARD, game.TOSS_MAX_FORWARD, game.toss_forward) * 100)
 					hint = "HEIGHT %d%%  ·  CHARGE %d%%  ·  RELEASE %s" % [vertical, forward, key_names.get("block", "X")]
-				"serve_windup": hint = "Get ready to approach"
-				"serve_toss": hint = "Approach, %s to jump, then %s to hit" % [key_names.get("jump", "Z"), key_names.get("jump", "Z")]
+					if game.serve_needs_more_room(): hint = "HEIGHT %d%%  ·  CHARGE %d%%  ·  STEP BACK" % [vertical, forward]
+				"serve_windup": hint = "Move either way  ·  stay behind the serving line"
+				"serve_toss": hint = "Stay behind the line  ·  %s jump, then %s hit" % [key_names.get("jump", "Z"), key_names.get("jump", "Z")]
 		box(Rect2(w / 2 - 218, 138, 436, 63), Color(0.055, 0.10, 0.17, 0.92), 12, Color("334d60"))
 		text_at(Vector2(w / 2, 162), prompt, 13, WHITE, true)
 		text_at(Vector2(w / 2, 185), hint, 12, MUTED, true)
@@ -87,3 +87,16 @@ func _draw() -> void:
 		box(Rect2(x, h - 63, key_w, 28), Color("233c51"), 6)
 		text_at(Vector2(x + key_w / 2, h - 44), key, 12, WHITE, true)
 		text_at(Vector2(x + key_w + 9, h - 45), controls[i][1], 9, MUTED)
+
+func draw_shot_readouts() -> void:
+	var recent = game.shots.recent(3)
+	if recent.is_empty(): return
+	box(Rect2(26, 146, 252, 27 + recent.size() * 52), Color(0.045,0.085,0.14,0.90), 9, Color("2c4357"))
+	text_at(Vector2(39,164), "RECENT SHOTS  ·  CONTACT HEIGHT", 10, MUTED)
+	for index in range(recent.size()):
+		var shot: Dictionary = recent[index]
+		var y = 184.0 + index * 52
+		var color = BLUE if shot.team == 0 else ORANGE
+		var label = "%s  %s #%d  ·  %s" % ["NORTH" if shot.team == 0 else "SOUTH", shot.role, shot.number, shot.action.to_upper()]
+		text_at(Vector2(39,y), label, 10, color)
+		text_at(Vector2(39,y+21), "%d km/h   ·   %.2f m" % [roundi(shot.speed_kmh), shot.contact_height_m], 17 if index == 0 else 15, WHITE if index == 0 else MUTED)

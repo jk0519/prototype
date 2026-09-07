@@ -13,11 +13,15 @@ func intentions(game, all_ai: bool) -> Array:
 			var ready_x = -65.0 if server.team == 0 else 2065.0
 			result[server.id] = {"move": toward(server, ready_x), "toss": game.phase_time > 0.55}
 		elif game.phase == "serve_aim":
-			# Keep a small approach moving under the held toss, just as a human can.
-			var charge_x = 5.0 if server.team == 0 else 1995.0
+			# Charge behind the eventual contact point. A forward toss released at
+			# the line cannot be chased legally while the ball is still unstruck.
+			var line_limit = game.grounded_serve_bounds(server.team).y if server.team == 0 else game.grounded_serve_bounds(server.team).x
+			var charge_x = line_limit - server.facing * (game.toss_forward + 22.0)
 			result[server.id] = {"move": toward(server, charge_x), "toss": game.phase_time < 0.42}
 		elif game.phase == "serve_windup":
-			result[server.id] = {"move": server.facing}
+			var line_limit = game.grounded_serve_bounds(server.team).y if server.team == 0 else game.grounded_serve_bounds(server.team).x
+			var release_x = line_limit - server.facing * (game.toss_forward + 22.0)
+			result[server.id] = {"move": toward(server, release_x)}
 		elif game.phase == "serve_toss":
 			var t = game.time_to_height(300)
 			var target = game.ball.x + game.ball_velocity.x * t - server.facing * 38

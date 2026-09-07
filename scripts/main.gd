@@ -131,18 +131,19 @@ func _physics_process(dt: float) -> void:
 	for event in game.events:
 		court.add_event(event)
 		sound.play(event)
+		var contact_velocity: Vector2 = event.get("velocity", game.ball_velocity)
 		if event.kind in ["spike", "serve"]:
 			var quality = float(event.get("quality", 0.62))
 			shake = lerpf(7.0, 16.0, quality) if effects_on else 0.0
 			impact_hold = lerpf(0.028, 0.068, quality) if effects_on else 0.0
 			impact_zoom = lerpf(0.025, 0.070, quality) if effects_on else 0.0
-			impact_tilt = -signf(game.ball_velocity.x) * lerpf(0.004, 0.016, quality) if effects_on else 0.0
+			impact_tilt = -signf(contact_velocity.x) * lerpf(0.004, 0.016, quality) if effects_on else 0.0
 		elif event.kind == "block":
 			var quality = float(event.get("quality", 0.62))
 			shake = lerpf(8.0, 18.0, quality) if effects_on else 0.0
 			impact_hold = lerpf(0.032, 0.074, quality) if effects_on else 0.0
 			impact_zoom = lerpf(0.030, 0.075, quality) if effects_on else 0.0
-			impact_tilt = -signf(game.ball_velocity.x) * lerpf(0.005, 0.018, quality) if effects_on else 0.0
+			impact_tilt = -signf(contact_velocity.x) * lerpf(0.005, 0.018, quality) if effects_on else 0.0
 	sound.update(game, dt)
 	if game.phase == "finished":
 		show_result()
@@ -339,6 +340,7 @@ func start_match() -> void:
 	game.reset()
 	court.trail.clear()
 	court.effects.clear()
+	court.shot_labels.clear()
 	mode = "playing"
 	overlay.hide()
 

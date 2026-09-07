@@ -74,6 +74,10 @@ func run() -> void:
 	main.sound.enabled = false
 	main.start_match()
 	await frames(42)
+	# Make room for a forward toss while respecting the serving line in the air.
+	Input.action_press("left")
+	await frames(30)
+	Input.action_release("left")
 	var serve_start_x = main.game.players[0].pos.x
 	Input.action_press("block")
 	Input.action_press("toss_raise")

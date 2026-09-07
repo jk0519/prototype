@@ -2,6 +2,7 @@ extends RefCounted
 ## The authoritative match simulation. Coordinates are x across the court and
 ## y above the floor. Rendering and keyboard handling never change the rules.
 const Athlete = preload("res://scripts/athlete.gd")
+const ShotTracker = preload("res://scripts/shot_tracker.gd")
 const AI = preload("res://scripts/ai_controller.gd")
 const BALL_RADIUS: float = 11.0
 const BALL_GRAVITY: float = 1800.0
@@ -14,8 +15,10 @@ const TOSS_MAX_HEIGHT: float = 940.0
 const TOSS_MIN_FORWARD: float = 120.0
 const TOSS_MAX_FORWARD: float = 480.0
 const SERVE_RAISE_DURATION: float = 0.11
+const SERVICE_FOOT_CLEARANCE: float = 60.0
 const POINT_TRANSITION_DURATION: float = 0.52
 
+var shots = ShotTracker.new(COURT_RIGHT - COURT_LEFT)
 var players: Array = []
 var ai = AI.new()
 var rng = RandomNumberGenerator.new()
@@ -33,7 +36,6 @@ var phase_time: float = 0.0
 var toss_height: float = 560.0
 var toss_forward: float = 210.0
 var serve_charge: float = 0.0
-var serve_has_taken_off: bool = false
 var time: float = 0.0
 var serving_team: int = 0
 var serve_order: Array = [0, -1]
@@ -78,6 +80,7 @@ func reset() -> void:
 	time = 0
 	longest_rally = 0
 	best_hit_speed = 0
+	shots.reset()
 	history.clear()
 	metrics = {"serve": 0, "receive": 0, "set": 0, "spike": 0, "block": 0, "free": 0, "dive": 0, "net": 0, "points": 0}
 	prepare_serve()
@@ -95,7 +98,7 @@ func prepare_serve() -> void:
 	player_contact_locks.fill(0.0)
 	net_lock = 0
 	for p in players:
-		p.movement_bounds = Vector2(65, 962) if p.team == 0 else Vector2(1038, 1935)
+		p.movement_bounds = Athlete.rally_bounds(p.team)
 		p.reset(p.home_x)
 	server_id = serving_team * 3 + maxi(serve_order[serving_team], 0)
 	var server = players[server_id]
@@ -103,7 +106,6 @@ func prepare_serve() -> void:
 	server.reset(-125.0 if serving_team == 0 else 2125.0)
 	server.serve_pose = "ready"
 	serve_charge = 0
-	serve_has_taken_off = false
 	toss_forward = TOSS_MIN_FORWARD
 	ball = held_ball_position()
 	previous_ball = ball
@@ -123,9 +125,11 @@ func attack_x(side: int) -> float:
 	return 830.0 if side == 0 else 1170.0
 
 func grounded_serve_bounds(side: int) -> Vector2:
-	# One approach area from pickup through takeoff: releasing the toss must
-	# never replace a wide movement area with a smaller one under the player.
-	return Vector2(-260, COURT_LEFT - 16) if side == 0 else Vector2(COURT_RIGHT + 16, 2260)
+	# Keep the complete shoe silhouette behind the baseline until the hit,
+	# including a moving toss, airborne approach, reversal and missed landing.
+	# The apron stays available after contact; changing phase cannot push a
+	# server forward or strand any other role against the old backcourt wall.
+	return Vector2(Athlete.APRON_LEFT, COURT_LEFT - SERVICE_FOOT_CLEARANCE) if side == 0 else Vector2(COURT_RIGHT + SERVICE_FOOT_CLEARANCE, Athlete.APRON_RIGHT)
 
 func setter_for(side: int) -> int:
 	var setter = side * 3 + 1
@@ -164,6 +168,12 @@ func toss_velocity() -> Vector2:
 	var flight = vy / BALL_GRAVITY + sqrt(2 * (toss_height - 300) / BALL_GRAVITY)
 	return Vector2(players[server_id].facing * toss_forward / flight, vy)
 
+func serve_needs_more_room() -> bool:
+	var server = players[server_id]
+	var expected_root = toss_origin().x + server.facing * (toss_forward - 30.0)
+	var bounds = grounded_serve_bounds(server.team)
+	return expected_root > bounds.y + 35.0 if server.team == 0 else expected_root < bounds.x - 35.0
+
 func toss_preview() -> Array:
 	var points: Array = []
 	var origin = toss_origin()
@@ -194,6 +204,7 @@ func step(dt: float, human_intent: Dictionary = {}, all_ai: bool = false) -> voi
 		# The court stays live between rallies. Players can keep running while the
 		# score ticks over, then the next server is staged without a modal pause.
 		var point_intents = ai.intentions(self, all_ai)
+		for p in players: p.movement_bounds = Athlete.rally_bounds(p.team)
 		if not all_ai: point_intents[human_id] = human_intent
 		step_athletes(dt, point_intents)
 		if phase_time >= POINT_TRANSITION_DURATION: prepare_serve()
@@ -238,13 +249,11 @@ func step(dt: float, human_intent: Dictionary = {}, all_ai: bool = false) -> voi
 			events.append({"kind": "toss", "position": ball, "player": server_id})
 		return
 	server.serve_pose_time = phase_time
-	if phase == "serve_toss" and not serve_has_taken_off and server.pos.y <= 0.01:
+	if phase == "serve_toss":
 		server.movement_bounds = grounded_serve_bounds(server.team)
 	else:
-		server.movement_bounds = Vector2(-260, 962) if server.team == 0 else Vector2(1038, 2260)
+		server.movement_bounds = Athlete.rally_bounds(server.team)
 	step_athletes(dt, intents)
-	if phase == "serve_toss" and server.pos.y > 0.01:
-		serve_has_taken_off = true
 	# Four swept intervals prevent fast spikes tunnelling through the net or floor.
 	for substep in range(4):
 		if phase not in ["rally", "serve_toss"]: break
@@ -285,7 +294,9 @@ func step_ball(dt: float) -> void:
 		else:
 			var landed_on = 0 if ball.x < NET_X else 1
 			award_point(1 - landed_on, "BALL DOWN")
-	elif ball.x < -400 or ball.x > 2400:
+	# Players can serve and chase balls from the full rear apron. The runaway
+	# guard must sit beyond that playable area and its extended hand contacts.
+	elif ball.x < Athlete.APRON_LEFT - 200.0 or ball.x > Athlete.APRON_RIGHT + 200.0:
 		award_point(1 - last_team if last_team >= 0 else 1 - serving_team, "OUT")
 
 func within_contact(p, action: String, radius: Vector2) -> bool:
@@ -362,13 +373,9 @@ func serve(p) -> void:
 	p.serve_pose = ""
 	ball = p.contact_center("serve") + Vector2(p.facing * BALL_RADIUS, 0)
 	var target = 1580.0 + rng.randf_range(-120, 120) if p.team == 0 else 420.0 + rng.randf_range(-120, 120)
-	var height_power = clampf((ball.y - 205) / 135.0, 0, 1)
-	# A clean jump serve is fast and initially flat, then its strong topspin
-	# pulls the ball sharply into the back court.
-	var strike_speed = p.config.spike_speed * lerpf(1.00, 1.55, quality) * lerpf(0.96, 1.08, height_power)
-	var flight = maxf(0.30, absf(target - ball.x) / strike_speed)
-	ball_topspin = lerpf(1450.0, 2700.0, quality)
-	ball_velocity = arc_to(Vector2(target, 58), flight, ball_gravity())
+	# Tune the actual outgoing vector in court-derived units, not just its label.
+	var serve_kmh = clampf(lerpf(80.0, 120.0, quality) * p.config.spike_speed / 2700.0, 65.0, 125.0)
+	ball_velocity = measured_attack_to(Vector2(target, 58), serve_kmh, lerpf(800.0, 1600.0, quality))
 	if p.id == human_id:
 		best_hit_speed = maxf(best_hit_speed, ball_velocity.length())
 	rally_contacts += 1
@@ -413,10 +420,9 @@ func contact(p, action: String) -> void:
 			if p.id == human_id:
 				depth = 605.0 - p.last_move * p.facing * 125.0
 			var target = NET_X + p.facing * depth
-			var strike_speed = p.config.spike_speed * lerpf(0.92, 1.50, quality)
-			var flight = maxf(0.20, absf(target - ball.x) / strike_speed)
-			ball_topspin = lerpf(850.0, 1900.0, quality)
-			ball_velocity = arc_to(Vector2(target, BALL_RADIUS), flight, ball_gravity())
+			var spike_kmh = clampf(lerpf(70.0, 125.0, quality) * p.config.spike_speed / 2700.0, 60.0, 130.0)
+			ball_velocity = measured_attack_to(Vector2(target, BALL_RADIUS), spike_kmh, lerpf(650.0, 1300.0, quality))
+
 		"set":
 			set_ball(p.team)
 		_:
@@ -459,6 +465,23 @@ func set_ball(side: int) -> void:
 	var flight = vy / BALL_GRAVITY + sqrt(2 * (apex - 325.0) / BALL_GRAVITY)
 	ball_velocity = Vector2((attack_x(side) - ball.x) / flight, vy)
 
+func measured_attack_to(target: Vector2, speed_kmh: float, extra_gravity: float) -> Vector2:
+	# Solve the short ballistic arc at the chosen full-vector launch speed.
+	# Less spin makes long weak shots reachable without secretly increasing speed.
+	var delta = target - ball
+	var speed = shots.world_speed(speed_kmh)
+	var speed_squared = speed * speed
+	var reachable_gravity = speed_squared / maxf(1.0, delta.length() + delta.y)
+	var gravity = clampf(reachable_gravity * 0.98, BALL_GRAVITY, BALL_GRAVITY + extra_gravity)
+	ball_topspin = gravity - BALL_GRAVITY
+	var a = speed_squared - gravity * delta.y
+	var discriminant = a * a - gravity * gravity * delta.length_squared()
+	if discriminant < 0:
+		# A contact too weak to reach its aim point remains a real short shot.
+		return Vector2(signf(delta.x), 1).normalized() * speed
+	var flight_squared = 2.0 * delta.length_squared() / maxf(0.001, a + sqrt(discriminant))
+	return arc_to(target, sqrt(maxf(0.0001, flight_squared)), gravity)
+
 func arc_to(target: Vector2, flight: float, gravity: float = BALL_GRAVITY) -> Vector2:
 	return Vector2((target.x - ball.x) / flight, (target.y - ball.y + 0.5 * gravity * flight * flight) / flight)
 
@@ -468,6 +491,9 @@ func emit_event(kind: String, position: Vector2, player_id: int = -1, details: D
 	metrics[kind] = metrics.get(kind, 0) + 1
 	var event = {"kind": kind, "position": position, "player": player_id}
 	event.merge(details, true)
+	if kind in ["serve", "receive", "set", "spike", "block", "dive", "free"] and player_id >= 0:
+		var measurement = shots.record(kind, players[player_id], ball_velocity, position, time)
+		event.merge(measurement, true)
 	events.append(event)
 
 func award_point(winner: int, reason: String) -> void:

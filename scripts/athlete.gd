@@ -5,6 +5,8 @@ const SWING_WINDUP = 0.070
 const SWING_END = 0.34
 const DIVE_DURATION = 0.32
 const DIVE_RECOVERY = 0.22
+const APRON_LEFT = -620.0
+const APRON_RIGHT = 2620.0
 
 var id: int
 var team: int
@@ -39,15 +41,19 @@ var gait_stop_remaining: float = 0.0
 var gait_stop_pose: Dictionary = {}
 var gait_start_remaining: float = 0.0
 var gait_start_pose: Dictionary = {}
+var transition_pose: Dictionary = {}
+var transition_remaining: float = 0.0
+var transition_duration: float = 0.0
 var animation_clock: float = 0.0
 var set_elapsed: float = -1.0
 var block_elapsed: float = -1.0
+var block_start_pose: Dictionary = {}
 var receive_elapsed: float = -1.0
 var step_distance: float = 0.0
 var skid_cooldown: float = 0.0
 var serve_pose: String = ""
 var serve_pose_time: float = 0.0
-var movement_bounds = Vector2(65, 962)
+var movement_bounds = Vector2(APRON_LEFT, 962)
 var motion_events: Array = []
 
 func _init(player_id: int, player_team: int, player_role: String, x: float):
@@ -58,8 +64,11 @@ func _init(player_id: int, player_team: int, player_role: String, x: float):
 	config = Config.for_role(role)
 	home_x = x
 	facing = 1.0 if team == 0 else -1.0
-	movement_bounds = Vector2(65, 962) if team == 0 else Vector2(1038, 1935)
+	movement_bounds = rally_bounds(team)
 	reset(x)
+
+static func rally_bounds(side: int) -> Vector2:
+	return Vector2(APRON_LEFT, 962) if side == 0 else Vector2(1038, APRON_RIGHT)
 
 func reset(x: float) -> void:
 	pos = Vector2(x, 0)
@@ -89,15 +98,20 @@ func reset(x: float) -> void:
 	gait_stop_pose.clear()
 	gait_start_remaining = 0.0
 	gait_start_pose.clear()
+	transition_pose.clear()
+	transition_remaining = 0.0
+	transition_duration = 0.0
 	animation_clock = id * 0.37
 	set_elapsed = -1
 	block_elapsed = -1
+	block_start_pose.clear()
 	receive_elapsed = -1
 	skid_cooldown = 0
 	motion_events.clear()
 
 func jump() -> void:
 	if pos.y <= 0.01 and jump_cooldown <= 0 and dive_timer <= 0 and dive_recovery <= 0 and jump_prepare <= 0:
+		if not blocking: block_start_pose.clear()
 		jump_prepare = 0.060
 		jump_cooldown = 0.16
 		motion_events.append("plant")
@@ -133,6 +147,9 @@ func step(dt: float, intent: Dictionary) -> void:
 		if braking or near_boundary: stopping_pose = Pose.sample(self)
 	gait_stop_remaining = maxf(0.0, gait_stop_remaining - dt)
 	gait_start_remaining = maxf(0.0, gait_start_remaining - dt)
+	transition_remaining = maxf(0.0, transition_remaining - dt)
+	if blocking and not intent.get("block", false):
+		start_pose_transition(Pose.sample(self), 0.12)
 	motion_events.clear()
 	animation_clock += dt
 	previous_pos = pos
@@ -154,6 +171,8 @@ func step(dt: float, intent: Dictionary) -> void:
 	landing_timer = maxf(0, landing_timer - dt)
 	contact_flash = maxf(0, contact_flash - dt)
 	skid_cooldown = maxf(0, skid_cooldown - dt)
+	if intent.get("block", false) and not blocking:
+		block_start_pose = Pose.sample(self)
 	receiving = intent.get("receive", false)
 	setting = intent.get("set", false)
 	blocking = intent.get("block", false)
@@ -192,14 +211,18 @@ func step(dt: float, intent: Dictionary) -> void:
 		velocity.x = (actual_x - pos.x) / dt if dt > 0 else 0.0
 	pos.x = actual_x
 	if jump_prepare > 0:
+		var takeoff_pose: Dictionary = Pose.sample(self) if jump_prepare <= dt else {}
 		jump_prepare = maxf(0, jump_prepare - dt)
 		if jump_prepare == 0:
+			start_pose_transition(takeoff_pose, 0.065)
 			velocity.y = config.jump_speed
 			motion_events.append("takeoff")
 	if pos.y > 0 or velocity.y > 0:
+		var landing_pose: Dictionary = Pose.sample(self) if pos.y > 0 and pos.y + (velocity.y - config.gravity * dt) * dt <= 0 else {}
 		velocity.y -= config.gravity * dt
 		pos.y += velocity.y * dt
 		if pos.y <= 0:
+			start_pose_transition(landing_pose, 0.10)
 			pos.y = 0
 			velocity.y = 0
 			blocking = false
@@ -222,6 +245,12 @@ func step(dt: float, intent: Dictionary) -> void:
 		gait_start_remaining = 0.10
 	elif absf(velocity.x) <= 12.0 or pos.y >= 1.0 or dive_timer > 0:
 		gait_start_remaining = 0.0
+
+func start_pose_transition(from_pose: Dictionary, duration: float) -> void:
+	if from_pose.is_empty(): return
+	transition_pose = from_pose
+	transition_duration = duration
+	transition_remaining = duration
 
 func visual_pose() -> Dictionary:
 	return Pose.sample(self)

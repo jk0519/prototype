@@ -12,6 +12,8 @@ func _initialize() -> void:
 	check_boundaries()
 	check_serve()
 	check_actions()
+	check_attack_sequence()
+	check_block_sequence()
 	check_contact_confirmation()
 	if failures.is_empty():
 		print("PASS: %d side-view poses; planted feet, moving carry, continuous toss/strike/recovery, fixed limb lengths and visible contacts" % sampled_poses)
@@ -228,6 +230,68 @@ func check_contact_confirmation() -> void:
 	p.confirm_hit(p.pos + before.front_hand)
 	var after: Dictionary = Pose.sample(p)
 	expect(before.front_hand.distance_to(after.front_hand) < 0.01, "Registering contact does not jump animation time or relocate the palm")
+
+func check_attack_sequence() -> void:
+	var p = player()
+	p.pos.y = 150
+	p.velocity.y = 90
+	p.swing_elapsed = 0.035
+	var coil: Dictionary = Pose.sample(p)
+	expect(coil.front_elbow.x < coil.front_shoulder.x - 12 and coil.front_elbow.y > coil.front_shoulder.y + 6, "Spike cocks the hitting elbow behind and above its shoulder")
+	expect(coil.back_hand.y > coil.head.y + 14 and coil.front_hand.x < coil.head.x, "Spike tracks ball with off arm while hitting hand stays behind head")
+	p.swing_elapsed = 0.063
+	var lead: Dictionary = Pose.sample(p)
+	p.swing_elapsed = 0.108
+	var contact: Dictionary = Pose.sample(p)
+	expect(lead.shoulder.x - lead.hip.x > coil.shoulder.x - coil.hip.x + 5, "Torso begins unwinding before contact")
+	expect(contact.front_hand.y > lead.front_hand.y + 18 and contact.front_hand.y > contact.head.y + 17, "Wrist whips upward after elbow lead to overhead contact")
+	expect((contact.front_elbow - contact.front_shoulder).normalized().dot((contact.front_hand - contact.front_elbow).normalized()) > 0.98, "Hitting arm reaches full extension at contact")
+	expect(contact.back_hand.y < contact.head.y - 15, "Off arm pulls down as hitting arm extends")
+	p.swing_elapsed = 0.20
+	var forward: Dictionary = Pose.sample(p)
+	p.swing_elapsed = 0.25
+	var across: Dictionary = Pose.sample(p)
+	expect(forward.front_hand.x > forward.front_shoulder.x + 20 and across.front_hand.y < across.front_shoulder.y - 22, "Follow-through sweeps forward then down across body instead of retracting through forehead")
+	for i in 109:
+		p.swing_elapsed = i * 0.001
+		var pose: Dictionary = Pose.sample(p)
+		var nearest: Vector2 = Geometry2D.get_closest_point_to_segment(pose.head, pose.front_elbow, pose.front_hand)
+		expect(nearest.distance_to(pose.head) > 6.5, "Loaded forearm travels behind and above the skull through overhead contact")
+
+func check_block_sequence() -> void:
+	for role in ["WS", "MB"]:
+		var p = player(role)
+		var previous: Dictionary = Pose.sample(p)
+		var saw_takeoff = false
+		var saw_landing = false
+		for i in 245:
+			var was_airborne: bool = p.pos.y > 1
+			p.step(1.0 / 240.0, {"block": i < 82})
+			var pose: Dictionary = Pose.sample(p)
+			validate_limbs(p, pose)
+			if not was_airborne and p.pos.y > 1: saw_takeoff = true
+			if was_airborne and p.pos.y < 1: saw_landing = true
+			expect(pose.front_hand.distance_to(previous.front_hand) < 5.0, "Block lift, takeoff, button release and landing keep continuous hand motion")
+			expect(pose.hip.distance_to(previous.hip) < 1.8, "Jump and landing transitions avoid instant body hinges")
+			if p.block_elapsed > 0.20 and p.blocking:
+				expect(pose.front_hand.y > pose.head.y + 15 and pose.back_hand.y > pose.head.y + 15, "Both blocking palms remain above the forehead")
+				expect(absf(pose.shoulder.x - pose.hip.x) < 2.5, "Block has upright silhouette distinct from spike arch")
+			if not p.blocking and p.pos.y > 1 and p.transition_remaining == 0 and i > 112:
+				expect(pose.front_hand.y < pose.head.y - 20 and absf(pose.shoulder.x - pose.hip.x) < 2.5, "Releasing block lowers arms into neutral descent without cocking a spike")
+			previous = pose
+		expect(saw_takeoff and saw_landing, "Block continuity check covers a complete jump and landing")
+		p.jump_cooldown = 0
+		p.jump()
+		expect(p.block_start_pose.is_empty(), "A subsequent normal jump clears old blocking motion history")
+		p.reset(400)
+		p.pos.y = 170
+		p.blocking = true
+		p.block_elapsed = 0.30
+		for i in 35:
+			p.contact_flash = 0.14 * (1.0 - i / 34.0)
+			var pose: Dictionary = Pose.sample(p)
+			validate_limbs(p, pose)
+			expect(pose.front_hand.y > pose.head.y + 15 and pose.back_hand.y > pose.head.y + 15, "Block impact yields slightly without folding hands into the face")
 
 func validate_limbs(p, pose: Dictionary) -> void:
 	sampled_poses += 1

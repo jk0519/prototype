@@ -240,7 +240,8 @@ func check_arcade_mechanics() -> void:
 	game.ball = server.contact_center("serve")
 	game.previous_ball = game.ball
 	game.serve(server)
-	expect(game.ball_topspin > 2500 and game.ball_velocity.length() > 3500, "Perfect jump serve launches at extreme arcade speed with severe topspin")
+	var serve_kmh = game.ball_velocity.length() * (18.0 / 1640.0) * 3.6
+	expect(game.ball_topspin >= 800 and game.ball_topspin <= 1600 and serve_kmh >= 85 and serve_kmh <= 125, "Perfect jump serve launches at a reasonable measured speed with strong topspin")
 	var initial_vertical = game.ball_velocity.y
 	game.contact_lock = 2
 	game.step_ball(0.2)

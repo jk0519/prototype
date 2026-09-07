@@ -39,8 +39,8 @@ func check_serve_runup() -> void:
 		expect(game.phase == "serve_toss", "Side %d toss releases after long moving charge" % side)
 		expect(largest_step <= server.config.run_speed * DT + 0.01, "Side %d release never teleports the server" % side)
 		expect(absf(server.pos.x - release_x) < 0.01, "Side %d stays at the same approach boundary after release" % side)
-		# Keep a missed toss in flight beyond landing: once the athlete takes off,
-		# landing inside the court must not reinstate the behind-baseline clamp.
+		# Jumping must not remove the service line. Keep a missed toss in flight
+		# through landing and verify the same boundary in every air phase.
 		game.ball = Vector2(1000, 2200)
 		game.previous_ball = game.ball
 		game.ball_velocity = Vector2.ZERO
@@ -50,13 +50,15 @@ func check_serve_runup() -> void:
 		var landed = false
 		for i in range(128):
 			var before = server.pos.x
+			game.ball = Vector2(1000, 2200)
+			game.ball_velocity = Vector2.ZERO
 			game.step(DT, {"move": server.facing})
 			largest_step = maxf(largest_step, absf(server.pos.x - before))
 			airborne = airborne or server.pos.y > 1
 			landed = landed or (airborne and server.pos.y <= 0.01)
 		expect(airborne and landed, "Side %d completes a serve approach jump and landing" % side)
 		expect(largest_step <= server.config.run_speed * DT + 0.01, "Side %d landing never snaps back behind the service line" % side)
-		expect((server.pos.x - release_x) * server.facing > 200, "Side %d can land forward inside the court" % side)
+		expect(absf(server.pos.x - release_x) < 0.01, "Side %d remains behind the line through an unstruck jump and landing" % side)
 
 func check_immediate_block() -> void:
 	var game = MatchModel.new(5)

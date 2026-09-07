@@ -3,6 +3,7 @@ extends Node2D
 var game
 var effects: Array = []
 var trail: Array = []
+var shot_labels: Array = []
 var clock: float = 0
 var landing_guide: bool = true
 var font = ThemeDB.fallback_font
@@ -14,6 +15,8 @@ const AthleteRenderer = preload("res://scripts/athlete_renderer.gd")
 
 func advance(dt: float) -> void:
 	clock += dt
+	for label in shot_labels: label.age += dt
+	shot_labels = shot_labels.filter(func(label): return label.age < 1.05)
 	for effect in effects:
 		effect.age += dt
 	effects = effects.filter(func(e): return e.age < e.lifetime)
@@ -24,6 +27,8 @@ func advance(dt: float) -> void:
 	queue_redraw()
 
 func add_event(event: Dictionary) -> void:
+	if event.has("speed_kmh"):
+		shot_labels.append({"position": event.position, "age": 0.0, "speed_kmh": event.speed_kmh, "height": event.contact_height_m, "team": event.team, "id": event.shot_id})
 	if event.kind in ["serve", "receive", "set", "spike", "block", "dive", "free", "net", "plant", "takeoff", "land", "skid", "slide", "floor"]:
 		var kind: String = event.kind
 		var effect = {
@@ -33,7 +38,7 @@ func add_event(event: Dictionary) -> void:
 			"lifetime": 0.52 if kind in ["serve", "spike", "block"] else 0.30,
 			"quality": float(event.get("quality", 0.62)),
 			"speed": float(event.get("speed", 0.0)),
-			"ball_velocity": game.ball_velocity,
+			"ball_velocity": event.get("velocity", game.ball_velocity),
 		}
 		var player_id = int(event.get("player", -1))
 		if player_id >= 0 and player_id < game.players.size():
@@ -109,16 +114,24 @@ func _draw() -> void:
 		if effect.kind in ["serve", "spike", "block", "set", "receive", "net"]:
 			draw_arc(pos, radius, 0, TAU, 32, Color(color, alpha * 0.82), 3.2, true)
 		if effect.kind in ["serve", "spike", "block"]:
-			var flash = clampf(1 - effect.age / 0.16, 0, 1)
-			draw_circle(pos, lerpf(22, 48, quality) * flash, Color(CREAM, flash * lerpf(0.24, 0.52, quality)))
+			var flash = clampf(1 - effect.age / 0.080, 0, 1)
+			draw_circle(pos, lerpf(10, 22, quality) * flash, Color(CREAM, flash * lerpf(0.24, 0.52, quality)))
 			var ray_count = 5 + roundi(quality * 4)
 			for i in range(ray_count):
 				var ray = Vector2.from_angle(i * TAU / ray_count + 0.16) * (42 + effect.age * lerpf(170, 300, quality))
 				draw_line(pos + ray * 0.42, pos + ray, Color(CREAM, alpha * 0.78), 2.0 + quality, true)
-			draw_attack_speed_lines(effect, pos, color)
-			var slash = Vector2(36, -72) * Vector2(signf(effect.ball_velocity.x), 1)
-			draw_line(pos - slash, pos + slash, Color(CREAM, flash * 0.9), 7.0, true)
-			draw_line(pos - slash * 0.65, pos + slash * 0.65, Color(color, flash), 2.5, true)
+			if effect.kind == "block":
+				# A compact two-hand stop reads differently from a swinging strike.
+				draw_line(pos + Vector2(-15,-4), pos + Vector2(15,-4), Color(CREAM, flash), 4.0, true)
+				var rebound = Vector2(effect.ball_velocity.x, -effect.ball_velocity.y).normalized()
+				for lane in range(-1,2):
+					var side = rebound.orthogonal() * lane * 8
+					draw_line(pos + side + rebound * 12, pos + side + rebound * 39, Color(color,flash*0.8), 2, true)
+			else:
+				draw_attack_speed_lines(effect, pos, color)
+				var slash = Vector2(18, -28) * Vector2(signf(effect.ball_velocity.x), 1)
+				draw_line(pos - slash, pos + slash, Color(CREAM, flash * 0.9), 3.5, true)
+				draw_line(pos - slash * 0.65, pos + slash * 0.65, Color(color, flash), 1.6, true)
 		if effect.kind == "set":
 			caption(pos + Vector2(0, -35 - effect.age * 55), "SET", 15, Color(CREAM, alpha), true)
 		elif effect.kind in ["land", "skid", "slide", "floor"]:
@@ -129,6 +142,12 @@ func _draw() -> void:
 				var side = -1.0 if i % 2 == 0 else 1.0
 				var dust = floor_pos + Vector2(side * (10 + i * 6 + effect.age * 85), -3 - i * 2)
 				draw_circle(dust, 3 + (4 - i) * 0.8, Color(CREAM, alpha * 0.26))
+	for label in shot_labels:
+		var at = Vector2(label.position.x, -label.position.y) + Vector2(0, -43 - (label.id % 2) * 22 - label.age * 24)
+		var alpha = clampf((1.05 - label.age) / 0.32, 0, 1)
+		var text = "%d km/h · %.2f m" % [roundi(label.speed_kmh), label.height]
+		caption(at + Vector2(1,2), text, 18, Color(INK, alpha), true)
+		caption(at, text, 18, Color(BLUE if label.team == 0 else ORANGE, alpha), true)
 	var wash = impact_wash_alpha()
 	if wash > 0:
 		draw_rect(Rect2(-2000, -2200, 6000, 3500), Color(CREAM, wash))
@@ -154,7 +173,7 @@ func draw_attack_speed_lines(effect: Dictionary, pos: Vector2, color: Color) -> 
 
 func draw_impact_afterimages() -> void:
 	for effect in effects:
-		if effect.kind not in ["serve", "spike", "block"] or effect.age > 0.15 or not effect.has("player_pose"):
+		if effect.kind not in ["serve", "spike"] or effect.age > 0.15 or not effect.has("player_pose"):
 			continue
 		var origin = Vector2(effect.player_position.x, -effect.player_position.y) - Vector2(effect.player_facing * 14, 0)
 		AthleteRenderer.draw_pose(self, effect.player_pose, origin, effect.player_facing, effect.player_team, 0.16 * (1.0 - effect.age / 0.15))

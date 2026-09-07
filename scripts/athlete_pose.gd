@@ -30,6 +30,8 @@ static func sample(p) -> Dictionary:
 	var front_foot_angle: float = 0.0
 	var back_foot_angle: float = 0.0
 	var knee_bend: float = 1.0
+	var block_raise: float = 0.0
+	var block_recoil: float = 0.0
 	var state: String = "ready"
 	var front_planted: bool = grounded
 	var back_planted: bool = grounded
@@ -112,6 +114,16 @@ static func sample(p) -> Dictionary:
 		front_planted = false
 		back_planted = false
 		state = "air"
+		if not p.block_start_pose.is_empty():
+			# Releasing a block descends from a blocking jump. The old generic
+			# air pose re-cocked the hitting arm, turning every block into a spike.
+			tilt = 0.04
+			front_hand = Vector2(17, 51).lerp(Vector2(16, 48), fall)
+			back_hand = Vector2(10, 49).lerp(Vector2(8, 47), fall)
+			front_foot = Vector2(6, 2.5).lerp(Vector2(12, 3), fall)
+			back_foot = Vector2(-11, 5).lerp(Vector2(-10, 3), fall)
+			front_foot_angle = -0.08 * (1.0 - fall)
+			back_foot_angle = -0.16 * (1.0 - fall)
 	elif p.landing_timer > 0:
 		var absorb: float = sin(clampf(p.landing_timer / 0.12, 0, 1) * PI)
 		hip.y -= 9.0 * absorb
@@ -150,12 +162,17 @@ static func sample(p) -> Dictionary:
 		back_foot = attack.back_foot
 		state = "strike"
 	elif p.blocking:
-		var raise: float = smoothstep(0.0, 0.13, maxf(p.block_elapsed, 0))
-		var recoil: float = sin(clampf((0.14 - p.contact_flash) / 0.14, 0, 1) * PI) if p.contact_flash > 0 else 0.0
-		if not grounded: hip.y = lerpf(hip.y, 46.0, raise)
-		tilt = lerpf(tilt, 0.08, raise)
-		front_hand = front_hand.lerp(Vector2(19, 109 - recoil * 5), raise)
-		back_hand = back_hand.lerp(Vector2(9, 110 - recoil * 5), raise)
+		block_raise = smoothstep(0.0, 0.18, maxf(p.block_elapsed, 0))
+		block_recoil = sin(clampf((0.14 - p.contact_flash) / 0.14, 0, 1) * PI) if p.contact_flash > 0 else 0.0
+		if not grounded:
+			hip = hip.lerp(Vector2(0, 46), block_raise)
+			front_foot = front_foot.lerp(Vector2(4, 1.5), block_raise)
+			back_foot = back_foot.lerp(Vector2(-11, 3.5), block_raise)
+			front_foot_angle = lerpf(front_foot_angle, -0.14, block_raise)
+			back_foot_angle = lerpf(back_foot_angle, -0.24, block_raise)
+		# A block stays long and upright. Contact gives through the shoulders,
+		# never folds the hands down into the face like an attacking wind-up.
+		tilt = lerpf(tilt, 0.04 - block_recoil * 0.045, block_raise)
 		state = "block"
 	elif p.setting:
 		var raise: float = smoothstep(0.0, 0.13, maxf(p.set_elapsed, 0))
@@ -196,10 +213,29 @@ static func sample(p) -> Dictionary:
 	var separation: float = 1.8 + absf(turn) * 4.0
 	var front_shoulder: Vector2 = shoulder + Vector2(separation, -1.0)
 	var back_shoulder: Vector2 = shoulder + Vector2(-separation, 0.5)
+	if state == "strike":
+		# The near shoulder rolls forward with extension. Keeping it pinned to
+		# the rear profile silhouette sent the forearm straight through the head.
+		front_shoulder += Vector2(4, 3) * smoothstep(0.060, 0.095, p.swing_elapsed) * (1.0 - smoothstep(0.135, 0.22, p.swing_elapsed))
 	var front_hip: Vector2 = hip + Vector2(1.8, 0)
 	var back_hip: Vector2 = hip + Vector2(-1.8, 0)
 	var near_arm: Dictionary = _limb(front_shoulder, front_hand, UPPER_ARM, FOREARM, 1)
 	var far_arm: Dictionary = _limb(back_shoulder, back_hand, UPPER_ARM, FOREARM, 1)
+	if state == "air" and not p.block_start_pose.is_empty():
+		near_arm = _limb(front_shoulder, front_hand, UPPER_ARM, FOREARM, -1)
+		far_arm = _limb(back_shoulder, back_hand, UPPER_ARM, FOREARM, -1)
+	if state == "strike":
+		near_arm = _attack_arm(p.swing_elapsed, front_shoulder, near_arm, false)
+		far_arm = _attack_arm(p.swing_elapsed, back_shoulder, far_arm, true)
+	elif state == "block":
+		var near_wall: Dictionary = _arm_angles(front_shoulder, deg_to_rad(63 + block_recoil * 2), deg_to_rad(86 - block_recoil * 3))
+		var far_wall: Dictionary = _arm_angles(back_shoulder, deg_to_rad(80 + block_recoil * 2), deg_to_rad(82 - block_recoil * 3))
+		if not p.block_start_pose.is_empty():
+			var old: Dictionary = p.block_start_pose
+			near_arm = _arm_angles(front_shoulder, (old.front_elbow - old.front_shoulder).angle(), (old.front_hand - old.front_elbow).angle())
+			far_arm = _arm_angles(back_shoulder, (old.back_elbow - old.back_shoulder).angle(), (old.back_hand - old.back_elbow).angle())
+		near_arm = _blend_arm(front_shoulder, near_arm, near_wall, block_raise)
+		far_arm = _blend_arm(back_shoulder, far_arm, far_wall, block_raise)
 	var near_leg: Dictionary = _limb(front_hip, front_foot, THIGH, SHIN, knee_bend)
 	var far_leg: Dictionary = _limb(back_hip, back_foot, THIGH, SHIN, knee_bend)
 	var joints = {
@@ -215,6 +251,8 @@ static func sample(p) -> Dictionary:
 		"front_planted": front_planted, "back_planted": back_planted,
 		"state": state
 	}
+	if p.transition_remaining > 0 and not p.transition_pose.is_empty():
+		joints = _transition(p.transition_pose, joints, smoothstep(0.0, 1.0, 1.0 - p.transition_remaining / p.transition_duration), clampf(p.config.height / 92.0, 0.85, 1.15), grounded)
 	# Scale the full skeleton once, preserving every joint relationship.
 	var scale_factor: float = clampf(p.config.height / 92.0, 0.85, 1.15)
 	for key in joints:
@@ -252,14 +290,87 @@ static func _limb(origin: Vector2, target: Vector2, upper: float, lower: float, 
 
 static func _attack(time: float, base_hip: Vector2, base_tilt: float, base_front_hand: Vector2, base_back_hand: Vector2, base_front_foot: Vector2, base_back_foot: Vector2) -> Dictionary:
 	var base = {"hip": base_hip, "tilt": base_tilt, "turn": 0.0, "front_hand": base_front_hand, "back_hand": base_back_hand, "front_foot": base_front_foot, "back_foot": base_back_foot}
-	var coil = {"hip": Vector2(3, 46), "tilt": -0.38, "turn": 0.48, "front_hand": Vector2(-15, 102), "back_hand": Vector2(25, 105), "front_foot": Vector2(10, 8), "back_foot": Vector2(-24, 16)}
-	var contact = {"hip": Vector2(-1, 49), "tilt": 0.32, "turn": 0.18, "front_hand": Vector2(30, 110), "back_hand": Vector2(12, 63), "front_foot": Vector2(13, 9), "back_foot": Vector2(-28, 12)}
-	var through = {"hip": Vector2(0, 41), "tilt": 0.52, "turn": -0.36, "front_hand": Vector2(8, 45), "back_hand": Vector2(-13, 52), "front_foot": Vector2(21, 5), "back_foot": Vector2(-19, 10)}
-	if time < 0.045: return _mix(base, coil, smoothstep(0.0, 0.045, time))
-	if time < 0.108: return _mix(coil, contact, smoothstep(0.045, 0.108, time))
+	var coil = base.duplicate()
+	coil.merge({"hip": Vector2(3, 46), "tilt": -0.34, "turn": 0.44, "front_foot": Vector2(8, 6), "back_foot": Vector2(-24, 18)}, true)
+	var contact = base.duplicate()
+	contact.merge({"hip": Vector2(-1, 49), "tilt": 0.24, "turn": 0.12, "front_foot": Vector2(10, 7), "back_foot": Vector2(-26, 15)}, true)
+	var through = base.duplicate()
+	through.merge({"hip": Vector2(0, 42), "tilt": 0.43, "turn": -0.26, "front_foot": Vector2(20, 6), "back_foot": Vector2(-17, 11)}, true)
+	if time < 0.035: return _mix(base, coil, smoothstep(0.0, 0.035, time))
+	# Chest leads before the hand accelerates. Giving every joint the same
+	# interpolation curve made the whole player hinge like a single cutout.
+	if time < 0.095: return _mix(coil, contact, smoothstep(0.035, 0.095, time))
 	if time < 0.135: return contact
-	if time < 0.25: return _mix(contact, through, smoothstep(0.135, 0.25, time))
-	return _mix(through, base, smoothstep(0.25, 0.34, time))
+	if time < 0.235: return _mix(contact, through, smoothstep(0.135, 0.235, time))
+	return _mix(through, base, smoothstep(0.235, 0.34, time))
+
+static func _arm_angles(origin: Vector2, upper_angle: float, lower_angle: float) -> Dictionary:
+	var elbow: Vector2 = origin + Vector2.from_angle(upper_angle) * UPPER_ARM
+	return {"joint": elbow, "end": elbow + Vector2.from_angle(lower_angle) * FOREARM}
+
+static func _blend_arm(origin: Vector2, from: Dictionary, to: Dictionary, weight: float) -> Dictionary:
+	return _arm_angles(origin,
+		lerp_angle((from.joint - origin).angle(), (to.joint - origin).angle(), weight),
+		lerp_angle((from.end - from.joint).angle(), (to.end - to.joint).angle(), weight))
+
+static func _attack_arm(time: float, origin: Vector2, base: Dictionary, far: bool) -> Dictionary:
+	# The hand follows an angular whip, not a chord through the skull. The
+	# non-hitting arm tracks the ball first, then pulls down as the chest opens.
+	var coil: Dictionary = _arm_angles(origin, deg_to_rad(78 if far else 155), deg_to_rad(77 if far else 70))
+	var elbow_lead: Dictionary = _arm_angles(origin, deg_to_rad(39 if far else 125), deg_to_rad(-46 if far else 180))
+	var contact: Dictionary = _arm_angles(origin, deg_to_rad(-108 if far else 70), deg_to_rad(-32 if far else 75))
+	var extension: Dictionary = _arm_angles(origin, deg_to_rad(-132 if far else 3), deg_to_rad(-56 if far else -48))
+	var across: Dictionary = _arm_angles(origin, deg_to_rad(-116 if far else -85), deg_to_rad(-71 if far else -140))
+	if time < 0.035: return _blend_arm(origin, base, coil, smoothstep(0.0, 0.035, time))
+	if time < 0.063: return _blend_arm(origin, coil, elbow_lead, _whip_progress(0.035, 0.063, time))
+	if time < 0.108: return _blend_arm(origin, elbow_lead, contact, _whip_progress(0.063, 0.108, time))
+	if time < 0.135: return contact
+	if time < 0.20: return _blend_arm(origin, contact, extension, smoothstep(0.135, 0.20, time))
+	if time < 0.25: return _blend_arm(origin, extension, across, smoothstep(0.20, 0.25, time))
+	return _blend_arm(origin, across, base, smoothstep(0.25, 0.34, time))
+
+static func _whip_progress(start: float, finish: float, time: float) -> float:
+	# Brief acceleration into a driven middle stroke, then settle at contact.
+	# Smoothstep on this short arc concentrated almost all travel into one
+	# rendered frame and made the forearm pop rather than visibly whip.
+	var t: float = clampf((time - start) / (finish - start), 0, 1)
+	const RAMP = 0.10
+	if t < RAMP: return 0.5 * t * t / (RAMP * (1.0 - RAMP))
+	if t > 1.0 - RAMP: return 1.0 - 0.5 * (1.0 - t) * (1.0 - t) / (RAMP * (1.0 - RAMP))
+	return (t - RAMP * 0.5) / (1.0 - RAMP)
+
+static func _transition(previous: Dictionary, current: Dictionary, weight: float, scale_factor: float, grounded: bool) -> Dictionary:
+	var old = previous.duplicate()
+	for key in old:
+		if old[key] is Vector2: old[key] /= scale_factor
+	var result = current.duplicate()
+	result.hip = old.hip.lerp(current.hip, weight)
+	var torso_angle: float = lerp_angle((old.shoulder - old.hip).angle(), (current.shoulder - current.hip).angle(), weight)
+	result.shoulder = result.hip + Vector2.from_angle(torso_angle) * TORSO_LENGTH
+	result.head = result.shoulder + (old.head - old.shoulder).lerp(current.head - current.shoulder, weight)
+	result.head_angle = lerp_angle(old.head_angle, current.head_angle, weight)
+	result.torso_turn = lerpf(old.torso_turn, current.torso_turn, weight)
+	for side in ["front", "back"]:
+		for root_name in ["shoulder", "hip"]:
+			var key: String = side + "_" + root_name
+			result[key] = result[root_name] + (old[key] - old[root_name]).lerp(current[key] - current[root_name], weight)
+		var shoulder: Vector2 = result[side + "_shoulder"]
+		# Block arms already follow one stable launch pose across takeoff. A
+		# second blend would hold them back and then rush through the extension.
+		var arm_weight: float = 1.0 if current.state == "block" else weight
+		var upper: float = lerp_angle((old[side + "_elbow"] - old[side + "_shoulder"]).angle(), (current[side + "_elbow"] - current[side + "_shoulder"]).angle(), arm_weight)
+		var lower: float = lerp_angle((old[side + "_hand"] - old[side + "_elbow"]).angle(), (current[side + "_hand"] - current[side + "_elbow"]).angle(), arm_weight)
+		var arm: Dictionary = _arm_angles(shoulder, upper, lower)
+		result[side + "_elbow"] = arm.joint
+		result[side + "_hand"] = arm.end
+		var foot: Vector2 = old[side + "_foot"].lerp(current[side + "_foot"], weight)
+		if grounded: foot.y = maxf(3, foot.y)
+		var leg: Dictionary = _limb(result[side + "_hip"], foot, THIGH, SHIN, 1)
+		result[side + "_knee"] = leg.joint
+		result[side + "_foot"] = leg.end
+		result[side + "_foot_angle"] = lerp_angle(old[side + "_foot_angle"], current[side + "_foot_angle"], weight)
+		result[side + "_planted"] = false
+	return result
 
 static func _dive(p, direction: float, base_hip: Vector2, base_tilt: float, base_front_hand: Vector2, base_back_hand: Vector2, base_front_foot: Vector2, base_back_foot: Vector2) -> Dictionary:
 	var base = {"hip": base_hip, "tilt": base_tilt, "front_hand": base_front_hand, "back_hand": base_back_hand, "front_foot": base_front_foot, "back_foot": base_back_foot}

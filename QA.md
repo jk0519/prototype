@@ -1,8 +1,8 @@
-# SIDEOUT 0.13.0 validation
+# SIDEOUT 0.14.0 validation
 
 Engine: Godot **4.7.2.stable.official.ed1daf0bf**. Development host: Apple Silicon Mac.
 
-This release replaces the whole-character atlas with a shared articulated side-view pose. The earlier 0.12.0 visual sign-off is superseded: its static-pose checks did not establish that the feet moved correctly during serves or that the character construction matched the intended side viewpoint. Passing numerical pose checks is necessary, but does not establish animation quality or gameplay parity with The Spike.
+This release changes attack/block motion, service boundaries, backward movement, physical attack speeds, and per-contact measurements. Passing numerical checks does not establish animation quality or gameplay parity with The Spike. Visual acceptance must use complete action sequences at normal court scale.
 
 ## Automated coverage
 
@@ -10,23 +10,29 @@ This release replaces the whole-character atlas with a shared articulated side-v
 | --- | --- |
 | `tests/simulation_test.gd` | Serve flow, toss options, role behavior, ball trajectories, scoring/faults, contact quality, AI rallies, and continuous point-to-next-serve flow |
 | `tests/integration_test.gd` | Actual main-scene keyboard controls, serving, contact feedback, pause/resume, rally flow, result/rematch, and input during impact holds |
-| `tests/contact_regression.gd` | Consistent grounded serve boundaries and immediate contacts by another athlete despite the previous hitter's debounce |
-| `tests/pose_regression.gd` | Fixed limb lengths, both feet taking stance phases, planted-foot stability in either movement direction, moving carry/charge/throw, continuous throwing and striking hands, utility actions, floor recovery, and no pose jump on hit confirmation |
+| `tests/contact_regression.gd` | Service boundaries through an unstruck jump/landing, immediate opposing contacts despite hitter debounce, block rebounds landing in court, and setter recovery after a dive |
+| `tests/pose_regression.gd` | Fixed limb lengths, planted-foot stability in both directions, moving carry/throw, distinct attack/block poses, head clearance, utility actions, floor recovery, and continuous takeoff/release/landing/contact transitions |
+| `tests/serve_control_regression.gd` | Real-scene serving controls, reversing in each serve phase, shoes behind both service lines through contact, backward movement after the hit, real tosses/hits from both rear apron endpoints, and floor/runaway rules |
+| `tests/shot_regression.gd` | All seven actions and six player identities, court unit conversion, actual outgoing speed and contact height, physical serve/spike speed limits, live AI coverage, fixed historical measurements, reset, and fault exclusion |
 | `tests/audio_test.gd` | Recorded sample loading, serve crowd/room lifecycle, action cues, and stopping sustained audio on pause/mute |
 
-The side-view pose suite samples all three roles. It exercises carry, aim, windup, and released-arm motion while running, rather than inspecting only stationary screenshots. Contact tests use the palm-centered action regions; a block has 42-unit radii on both axes, including the ball. These are assisted contact regions, not exact image outlines.
+The pose suite samples all three roles and exercises carry, aim, windup, and released-arm motion while running. Contact tests use the palm-centered action regions; a block has 42-unit radii on both axes, including the ball. These are assisted contact regions, not exact image outlines. The shot suite varies timing, contact elevation, position, role, and boosted power. It checks physical velocity independently of the HUD and accounts for gravity during the remaining ball substeps after a contact.
 
 ## Current release results
 
-Verified on September 6, 2026:
+The complete `tools/test.sh` run passed all seven suites with no script errors: **4,958 pose samples**, **42 player/action combinations**, **1,728 physical attack velocity cases**, live AI telemetry, physical keyboard input, rear-apron service regressions, and three complete seeded AI matches. The shot checks also verify that a later deflection cannot change an earlier contact effect's direction.
 
-- `tools/test.sh` passed: simulation, real-scene keyboard integration, audio, contact regressions, and **4,398** pose samples.
-- Three seeded AI matches finished: seed 7 at **9–15** (19-contact longest rally, 15 blocks), seed 21 at **15–7** (17 contacts, 7 blocks), and seed 83 at **15–13** (16 contacts, 7 blocks).
-- Contact regressions cover both serving boundaries, taps during hit-stop, human receive followed by a recovering AI setter, and eight representative block trajectories that land in the opposing court.
-- Native captures covered the toss, plant, jump, contact, follow-through, dive, jump-set, block, point transition, and settings. Enlarged renderings were reviewed for seams and overlap. A **901-frame, 60 fps** recording captured manual movement during serve preparation followed by AI rallies; frame sequences sampled at six frames per second were reviewed. It includes two serves, five sets, four spikes, and two blocks.
-- The universal Mac export completed. The build script verified the ad-hoc signed app and the exact ZIP after extraction outside the cloud-backed workspace. The packaged **0.13.0** app then launched, rendered a rally screenshot successfully, and exited without runtime errors.
+| Match seed | Final score | Simulation seconds | Longest rally contacts | Blocks |
+| --- | --- | --- | --- | --- |
+| 7 | 8–15 | 158.7 | 13 | 8 |
+| 21 | 15–10 | 178.3 | 36 | 7 |
+| 83 | 15–9 | 160.7 | 11 | 4 |
 
-The capture scripts keep audio silent. These checks establish the implemented mechanics and rendering paths; they do not certify the game’s appeal or exact reference-game parity.
+Native rendering review used a **901-frame, 60 fps** motion capture, with frame sequences sampled at 6 fps inspected across the 15-second recording, plus enlarged attack/block sequences and real-scene serve, contact, follow-through, and utility-action stills. The recording contains two serves, four receives, four sets, three spikes and a continuous point transition; blocks are covered by the separate pose sequence and native fixture. It does not establish exact timing parity with the reference game.
+
+The universal Mac release exported successfully. The exact release ZIP was extracted and passed strict, deep signature verification; bundle version is **0.14.0**. Its executable ran a silent native autoplay smoke check, reached a rally, saved a rendered screenshot successfully, and exited with code 0 without script errors. Cloud-folder Finder metadata was cleared from the local extracted copy before strict verification.
+
+Capture scripts keep audio silent. The checks establish implemented mechanics and rendering paths; they do not certify the game's appeal or exact reference-game parity.
 
 Run the checks from the repository with Godot on your path, or set `GODOT` for the project scripts. All automated launches should use dummy/headless audio or `--mute` to avoid unexpected playback.
 
@@ -36,6 +42,8 @@ godot --headless --path . --script res://tests/simulation_test.gd
 godot --headless --path . --script res://tests/integration_test.gd -- --mute
 godot --headless --path . --script res://tests/contact_regression.gd
 godot --headless --path . --script res://tests/pose_regression.gd
+godot --headless --path . --script res://tests/serve_control_regression.gd -- --mute
+godot --headless --path . --script res://tests/shot_regression.gd
 godot --headless --path . --script res://tests/audio_test.gd
 ```
 
@@ -46,8 +54,11 @@ Review the actual rendered court in motion, at its normal camera scale, for:
 - A narrow profile torso and head, consistent near/far limb overlap, and a limited intentional torso turn while attacking.
 - Alternating running feet while holding and throwing the serve, with each stance foot contacting the floor instead of sliding with the body.
 - A low hand-held ball during charge, a visible palm lift before release, and no detached ball or backward position jump at the phase change.
+- Direction reversal during charge, throw, flight, and after the hit; both shoes remain behind the line until contact, including during a moving jump. Check a long toss from near the line produces readable step-back guidance.
 - A readable plant, takeoff, arm load, overhead contact, follow-through, fall, and landing through complete sequences.
+- A hitting elbow loaded behind the head, a separate guiding arm, and a quick extension/follow-through that clears the head. A block keeps its torso upright and both hands overhead, then descends without adopting an attacking windup when the button is released.
 - Hands near the ball at serve, spike, set, and block contact, without moving the entire athlete to make a screenshot align.
+- Compact contact flashes that reveal the athlete, distinct block/attack feedback, and readable speed/height labels for both teams. Recent-shot rows must identify the correct player and remain stable while the ball continues its arc.
 - Dive extension and floor recovery without instantaneous knee reversal or premature jumping out of recovery.
 - Continuous ordinary-point flow, camera framing of high tosses and sets, and readable six-player scale.
 
@@ -55,8 +66,8 @@ Still captures help inspect silhouette and contact alignment. A consecutive-fram
 
 ## Practical limits
 
-This is a playable development prototype with one shared athlete design and two team palettes. It still needs human review and tuning of animation rhythm, contact timing, movement, extreme topspin, set height, impact hold, camera behavior, sound balance, and AI decisions. The shared pose removes the previous split between displayed artwork and a separate collision skeleton; it does not replace professional animation direction or broad player testing.
+This is a playable development prototype with one shared athlete design and two team palettes. It still needs human review and tuning of animation rhythm, contact timing, movement, curved attack trajectories, set height, impact hold, camera behavior, sound balance, and AI decisions. The shared pose aligns displayed artwork with contact positions; it does not replace animation direction or broad player testing. Shot units follow one 18-metre court scale, while the existing vertical gameplay and character proportions remain exaggerated.
 
-Recorded court audio remains from the existing CC0 sources. This release does not introduce new volleyball recordings or claim to resolve the user's concerns about sound by changing the character art. The wordless crowd is a generic anticipation/reaction recording. See `assets/audio/CREDITS.md` for source details.
+Recorded court audio and its source files are unchanged in this release. Sound quality remains an open playtesting concern. The wordless crowd is a generic anticipation/reaction recording. See `assets/audio/CREDITS.md` for source details.
 
 The Mac build is ad-hoc signed and not Apple-notarized. Intel Mac, Windows, and mobile have not been run on target hardware. The shared simulation has no macOS-only logic, but each target still needs export, performance, display, and input checks. Online play, touch controls, player switching, progression, and a varied roster are not implemented.
